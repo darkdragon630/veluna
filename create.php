@@ -5,7 +5,7 @@
  * Setelah akun dibuat, halaman ini OTOMATIS DITUTUP (403).
  */
 define('BASE_URL', ((!empty($_SERVER['HTTPS'])&&$_SERVER['HTTPS']!=='off')?'https':'http').'://'.$_SERVER['HTTP_HOST'].rtrim(dirname($_SERVER['SCRIPT_NAME']),'/').'/' );
-require_once __DIR__ . '/config/database.php'
+require_once __DIR__ . '/config/database.php';
 require_once __DIR__ . '/config/config.php';
 
 // Jika sudah ada user => 403
