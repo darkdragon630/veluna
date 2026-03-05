@@ -1,0 +1,99 @@
+# ============================================================
+# PortoFolio — Apache .htaccess
+# ============================================================
+
+# Sembunyikan listing direktori
+Options -Indexes
+Options +FollowSymLinks
+RewriteEngine On
+
+# ─────────────────────────────────────────────────────────────
+# PAKSA HTTPS (aktifkan jika server punya SSL)
+# ─────────────────────────────────────────────────────────────
+# RewriteCond %{HTTPS} off
+# RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+# ─────────────────────────────────────────────────────────────
+# BLOKIR AKSES LANGSUNG KE FOLDER SENSITIF
+# ─────────────────────────────────────────────────────────────
+
+# config/ — tidak boleh diakses sama sekali
+RewriteRule ^config(/|$) - [F,L]
+
+# includes/ — tidak boleh diakses sama sekali
+RewriteRule ^includes(/|$) - [F,L]
+
+# api/ root tanpa file name — larang directory browsing
+RewriteRule ^api/?$ - [F,L]
+
+# ─────────────────────────────────────────────────────────────
+# BLOKIR FILE SENSITIF
+# ─────────────────────────────────────────────────────────────
+<FilesMatch "^(database\.sql|composer\.(json|lock)|\.env|\.env\..*)$">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>
+
+# Blokir file backup, editor temp, log
+<FilesMatch "\.(bak|swp|orig|old|tmp|log|sh|sql~)$">
+    Order Allow,Deny
+    Deny from all
+</FilesMatch>
+
+# ─────────────────────────────────────────────────────────────
+# SECURITY HEADERS
+# ─────────────────────────────────────────────────────────────
+<IfModule mod_headers.c>
+    # Cegah browser menebak tipe konten (MIME sniffing)
+    Header always set X-Content-Type-Options "nosniff"
+
+    # Proteksi clickjacking — hanya boleh di-embed oleh domain sendiri
+    Header always set X-Frame-Options "SAMEORIGIN"
+
+    # XSS Protection (untuk browser lama)
+    Header always set X-XSS-Protection "1; mode=block"
+
+    # Jangan bocorkan URL penuh ke domain lain
+    Header always set Referrer-Policy "strict-origin-when-cross-origin"
+
+    # Hapus header yang bocorkan info server
+    Header always unset X-Powered-By
+    Header always unset Server
+
+    # Permissions Policy — matikan fitur browser yang tidak dipakai
+    Header always set Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+</IfModule>
+
+# ─────────────────────────────────────────────────────────────
+# CACHING ASET STATIS
+# ─────────────────────────────────────────────────────────────
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType text/css               "access plus 7 days"
+    ExpiresByType application/javascript "access plus 7 days"
+    ExpiresByType image/png              "access plus 30 days"
+    ExpiresByType image/jpeg             "access plus 30 days"
+    ExpiresByType image/webp             "access plus 30 days"
+    ExpiresByType image/svg+xml          "access plus 7 days"
+    ExpiresByType font/woff2             "access plus 30 days"
+    ExpiresByType font/woff              "access plus 30 days"
+</IfModule>
+
+# ─────────────────────────────────────────────────────────────
+# KOMPRESI GZIP
+# ─────────────────────────────────────────────────────────────
+<IfModule mod_deflate.c>
+    AddOutputFilterByType DEFLATE text/html
+    AddOutputFilterByType DEFLATE text/css
+    AddOutputFilterByType DEFLATE application/javascript
+    AddOutputFilterByType DEFLATE application/json
+    AddOutputFilterByType DEFLATE text/plain
+    AddOutputFilterByType DEFLATE text/xml
+</IfModule>
+
+# ─────────────────────────────────────────────────────────────
+# CUSTOM ERROR PAGES (opsional — sesuaikan path jika perlu)
+# ─────────────────────────────────────────────────────────────
+# ErrorDocument 403 /portofolio/index.php
+# ErrorDocument 404 /portofolio/index.php
+# ErrorDocument 500 /portofolio/index.php
