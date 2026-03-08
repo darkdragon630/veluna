@@ -126,6 +126,8 @@ function getCryptoPrices(): array {
 /** Statistik investasi yang sudah terjual */
 function getSoldStats(): array {
     $db = getDB();
+
+    // PnL dari transaksi jual
     $row = $db->query(
         "SELECT
             COUNT(*) AS total_sold,
@@ -134,11 +136,23 @@ function getSoldStats(): array {
             COALESCE(SUM(realized_pnl),0) AS total_realized_pnl
          FROM sell_history"
     )->fetch();
+
+    // Bunga/keuntungan tabungan = dianggap realized (sudah diterima)
+    $savingsRow = $db->query(
+        "SELECT COALESCE(SUM(unrealized_pnl), 0) AS savings_pnl
+         FROM investments
+         WHERE category = 'savings' AND is_sold = 0"
+    )->fetch();
+
+    $savingsPnl = (float)($savingsRow['savings_pnl'] ?? 0);
+
     return [
         'total_sold'        => (int)$row['total_sold'],
         'total_modal'       => (float)$row['total_modal_dijual'],
         'total_cash'        => (float)$row['total_cash_masuk'],
-        'total_realized_pnl'=> (float)$row['total_realized_pnl'],
+        'total_realized_pnl'=> (float)$row['total_realized_pnl'] + $savingsPnl,
+        'realized_from_sell'=> (float)$row['total_realized_pnl'],
+        'realized_from_savings' => $savingsPnl,
     ];
 }
 
