@@ -257,10 +257,20 @@ foreach (CATEGORIES as $cat => $cfg) {
     <div class="stat-sub">Posisi aktif (belum dijual)</div>
   </div>
   <div class="stat-card" style="border-color:rgba(240,180,41,0.3)">
-    <div class="stat-label">💸 Realized PnL (Jual)</div>
+    <div class="stat-label">💸 Realized PnL</div>
     <?php $sold = getSoldStats(); ?>
     <div class="stat-value gold"><?= pnlSign($sold['total_realized_pnl']) . fmtIDR($sold['total_realized_pnl']) ?></div>
-    <div class="stat-sub">Dari <?= $sold['total_sold'] ?> transaksi jual</div>
+    <div class="stat-sub">
+      <?php if ($sold['realized_from_sell'] != 0): ?>
+        💰 Jual: <?= pnlSign($sold['realized_from_sell']) . fmtIDR($sold['realized_from_sell']) ?><br>
+      <?php endif; ?>
+      <?php if ($sold['realized_from_savings'] != 0): ?>
+        🏦 Bunga: <?= pnlSign($sold['realized_from_savings']) . fmtIDR(abs($sold['realized_from_savings'])) ?>
+      <?php endif; ?>
+      <?php if ($sold['total_sold'] == 0 && $sold['realized_from_savings'] == 0): ?>
+        Belum ada
+      <?php endif; ?>
+    </div>
   </div>
 </div>
 
