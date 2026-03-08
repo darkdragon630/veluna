@@ -10,43 +10,21 @@ if (!isLoggedIn()) { echo json_encode(['success'=>false,'error'=>'Unauthorized']
 
 $method = $_SERVER['REQUEST_METHOD'];
 
-// GET — ambil entri PnL untuk 1 investasi
-if ($method === 'GET') {
-    $invId = (int)($_GET['inv_id'] ?? 0);
-    if (!$invId) { echo json_encode(['success'=>false,'error'=>'inv_id required']); exit; }
-    $entries = getInvPnl($invId);
-    $summary = getInvPnlSummary($invId);
-    echo json_encode(['success'=>true,'entries'=>$entries,'summary'=>$summary]);
-    exit;
-}
-
-// POST — tambah entri baru
+/**
+ * POST { investment_id, delta }
+ * delta: positif = tambah untung, negatif = tambah rugi
+ * Nilai disimpan kumulatif di investments.unrealized_pnl
+ */
 if ($method === 'POST') {
-    $body   = json_decode(file_get_contents('php://input'), true) ?? [];
-    $invId  = (int)($body['investment_id'] ?? 0);
-    $type   = $body['type']   ?? '';
-    $amount = (float)($body['amount'] ?? 0);
-    $source = trim($body['source'] ?? '');
-    $note   = trim($body['note']   ?? '');
-    $date   = $body['date']   ?? date('Y-m-d');
+    $body  = json_decode(file_get_contents('php://input'), true) ?? [];
+    $invId = (int)($body['investment_id'] ?? 0);
+    $delta = (float)($body['delta'] ?? 0);
 
-    if (!$invId)                          { echo json_encode(['success'=>false,'error'=>'investment_id required']); exit; }
-    if (!in_array($type, ['profit','loss'])) { echo json_encode(['success'=>false,'error'=>'type harus profit atau loss']); exit; }
-    if ($amount <= 0)                     { echo json_encode(['success'=>false,'error'=>'Amount harus > 0']); exit; }
+    if (!$invId) { echo json_encode(['success'=>false,'error'=>'investment_id required']); exit; }
+    if ($delta == 0) { echo json_encode(['success'=>false,'error'=>'Delta tidak boleh 0']); exit; }
 
-    $id      = addInvPnl($invId, $type, $amount, $source, $note, $date);
-    $summary = getInvPnlSummary($invId);
-    echo json_encode(['success'=>true,'id'=>$id,'summary'=>$summary]);
-    exit;
-}
-
-// DELETE — hapus entri
-if ($method === 'DELETE') {
-    $body = json_decode(file_get_contents('php://input'), true) ?? [];
-    $id   = (int)($body['id'] ?? 0);
-    if (!$id) { echo json_encode(['success'=>false,'error'=>'id required']); exit; }
-    $ok = deleteInvPnl($id);
-    echo json_encode(['success'=>$ok]);
+    $newVal = adjustUnrealizedPnl($invId, $delta);
+    echo json_encode(['success'=>true,'unrealized_pnl'=>$newVal]);
     exit;
 }
 
