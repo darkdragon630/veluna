@@ -137,22 +137,22 @@ function getSoldStats(): array {
          FROM sell_history"
     )->fetch();
 
-    // Bunga/keuntungan tabungan = dianggap realized (sudah diterima)
-    $savingsRow = $db->query(
-        "SELECT COALESCE(SUM(unrealized_pnl), 0) AS savings_pnl
-         FROM investments
-         WHERE category = 'savings' AND is_sold = 0"
+    // Realized PnL dari semua investasi:
+    // dividen saham, bagi hasil properti, staking crypto, bunga tabungan, dividen reksa dana
+    $invRealRow = $db->query(
+        "SELECT COALESCE(SUM(realized_pnl), 0) AS inv_realized
+         FROM investments WHERE is_sold = 0"
     )->fetch();
 
-    $savingsPnl = (float)($savingsRow['savings_pnl'] ?? 0);
+    $invRealized = (float)($invRealRow['inv_realized'] ?? 0);
 
     return [
-        'total_sold'        => (int)$row['total_sold'],
-        'total_modal'       => (float)$row['total_modal_dijual'],
-        'total_cash'        => (float)$row['total_cash_masuk'],
-        'total_realized_pnl'=> (float)$row['total_realized_pnl'] + $savingsPnl,
-        'realized_from_sell'=> (float)$row['total_realized_pnl'],
-        'realized_from_savings' => $savingsPnl,
+        'total_sold'            => (int)$row['total_sold'],
+        'total_modal'           => (float)$row['total_modal_dijual'],
+        'total_cash'            => (float)$row['total_cash_masuk'],
+        'total_realized_pnl'    => (float)$row['total_realized_pnl'] + $invRealized,
+        'realized_from_sell'    => (float)$row['total_realized_pnl'],
+        'realized_from_savings' => $invRealized,  // dividen/bunga/staking/bagi hasil semua kategori
     ];
 }
 
@@ -412,34 +412,30 @@ function setMaintenance(bool $active, array $data = []): bool {
 // ─────────────────────────────────────────────────────────────
 
 /**
- * Tambah atau kurangi unrealized PnL satu investasi.
- * $delta positif = keuntungan, negatif = kerugian.
- * Nilai baru = unrealized_pnl + $delta
+ * Adjust PnL per investasi.
+ * $kind: 'unrealized' (kenaikan harga) atau 'realized' (dividen/bunga/staking/bagi hasil)
+ * $delta: positif = untung, negatif = rugi
+ * Returns: ['unrealized_pnl' => x, 'realized_pnl' => y]
  */
-function adjustUnrealizedPnl(int $invId, float $delta): float {
-    $db = getDB();
+function adjustInvPnl(int $invId, string $kind, float $delta): array {
+    $db  = getDB();
+    $col = $kind === 'realized' ? 'realized_pnl' : 'unrealized_pnl';
     $db->prepare(
-        "UPDATE investments SET unrealized_pnl = COALESCE(unrealized_pnl, 0) + ? WHERE id = ?"
+        "UPDATE investments SET $col = COALESCE($col, 0) + ? WHERE id = ?"
     )->execute([$delta, $invId]);
 
-    $row = $db->prepare("SELECT unrealized_pnl FROM investments WHERE id = ?");
+    $row = $db->prepare("SELECT unrealized_pnl, realized_pnl FROM investments WHERE id = ?");
     $row->execute([$invId]);
-    return (float)($row->fetch()['unrealized_pnl'] ?? 0);
+    $r = $row->fetch();
+    return [
+        'unrealized_pnl' => (float)($r['unrealized_pnl'] ?? 0),
+        'realized_pnl'   => (float)($r['realized_pnl']   ?? 0),
+    ];
 }
 
 /**
- * Set unrealized PnL langsung ke nilai tertentu (override).
- */
-function setUnrealizedPnl(int $invId, float $value): float {
-    getDB()->prepare(
-        "UPDATE investments SET unrealized_pnl = ? WHERE id = ?"
-    )->execute([$value, $invId]);
-    return $value;
-}
-
-/**
- * Total unrealized PnL semua investasi (untuk overview).
- * Exclude savings (nabung) karena keuntungannya realized.
+ * Total unrealized PnL — kenaikan harga posisi aktif (belum dijual).
+ * Semua kategori kecuali emergency (tidak ada PnL).
  */
 function getTotalUnrealizedPnl(): array {
     try {
@@ -449,7 +445,7 @@ function getTotalUnrealizedPnl(): array {
                COALESCE(SUM(CASE WHEN unrealized_pnl < 0 THEN unrealized_pnl ELSE 0 END), 0) AS total_loss,
                COALESCE(SUM(unrealized_pnl), 0) AS net
              FROM investments
-             WHERE is_sold = 0 AND category != 'savings'"
+             WHERE is_sold = 0 AND category != 'emergency'"
         )->fetch();
         return [
             'profit' => (float)$row['total_profit'],
