@@ -77,7 +77,12 @@ $bestCat = array_key_first($performers) ?? null;
 <!-- ═══════════════════════════════════════════════
      SUMMARY STATS — 6 kartu utama
 ════════════════════════════════════════════════ -->
+<?php
+  $upnl     = getTotalUnrealizedPnl();
+  $totalPnl = $upnl['net'] + $soldStats['total_realized_pnl'];
+?>
 <div class="stats-grid">
+  <!-- Baris 1: Portofolio -->
   <div class="stat-card">
     <div class="stat-label">Total Portofolio</div>
     <div class="stat-value gold"><?= fmtIDR($allStats['totalValue']) ?></div>
@@ -89,22 +94,10 @@ $bestCat = array_key_first($performers) ?? null;
     <div class="stat-sub">Modal yang masih berjalan</div>
   </div>
   <div class="stat-card">
-    <div class="stat-label">Total PnL</div>
-    <div class="stat-value <?= pnlClass($allStats['pnl']) ?>"><?= pnlSign($allStats['pnl']) . fmtIDR($allStats['pnl']) ?></div>
-    <div class="stat-sub"><?= pnlSign($allStats['pnlPct']) . number_format($allStats['pnlPct'], 2) ?>% — Jumlah PnL semua kategori</div>
-  </div>
-  <div class="stat-card">
     <div class="stat-label">Target Total</div>
     <div class="stat-value gold"><?= number_format($totalProgress, 1) ?>%</div>
-    <div class="stat-sub">dari <?= fmtIDR($totalTarget ?: 0) ?> (sum target kategori)</div>
+    <div class="stat-sub">dari <?= fmtIDR($totalTarget ?: 0) ?></div>
   </div>
-  <?php if ($bestCat): ?>
-  <div class="stat-card">
-    <div class="stat-label">Best Performer</div>
-    <div class="stat-value green"><?= CATEGORIES[$bestCat]['icon'] ?> <?= CATEGORIES[$bestCat]['label'] ?></div>
-    <div class="stat-sub"><?= pnlSign($performers[$bestCat]) . number_format($performers[$bestCat], 2) ?>% return</div>
-  </div>
-  <?php endif; ?>
   <div class="stat-card" style="border-color:rgba(34,197,94,0.3)">
     <div class="stat-label">💵 Saldo Kas</div>
     <div class="stat-value <?= $cashStats['balance'] >= 0 ? 'green' : 'red' ?>">
@@ -117,21 +110,47 @@ $bestCat = array_key_first($performers) ?? null;
       <?php endif; ?>
     </div>
   </div>
-  <div class="stat-card">
-    <div class="stat-label">Aset Crypto</div>
-    <div class="stat-value cyan"><?= count($catData['crypto']['invs']) ?> aset</div>
-    <div class="stat-sub">Harga update real-time</div>
-  </div>
-  <?php $upnl = getTotalUnrealizedPnl(); ?>
+
+  <!-- Baris 2: PnL -->
   <div class="stat-card" style="border-color:rgba(<?= $upnl['net']>=0?'34,197,94':'239,68,68' ?>,0.3)">
-    <div class="stat-label">💹 Net Unrealized PnL</div>
+    <div class="stat-label">📈 Unrealized PnL</div>
     <div class="stat-value <?= pnlClass($upnl['net']) ?>"><?= pnlSign($upnl['net']) . fmtIDR($upnl['net']) ?></div>
     <div class="stat-sub">
       <span style="color:var(--green)">+<?= fmtIDR($upnl['profit']) ?></span>
-      / <span style="color:var(--red)">-<?= fmtIDR($upnl['loss']) ?></span><br>
-      <span style="font-size:10px">Belum terealisasi</span>
+      / <span style="color:var(--red)">-<?= fmtIDR($upnl['loss']) ?></span>
+      &bull; Posisi aktif
     </div>
   </div>
+  <div class="stat-card" style="border-color:rgba(240,180,41,0.3)">
+    <div class="stat-label">💸 Realized PnL</div>
+    <div class="stat-value gold"><?= pnlSign($soldStats['total_realized_pnl']) . fmtIDR($soldStats['total_realized_pnl']) ?></div>
+    <div class="stat-sub">
+      <?php if ($soldStats['total_sold'] > 0): ?>
+        💰 Jual: <?= pnlSign($soldStats['realized_from_sell']) . fmtIDR($soldStats['realized_from_sell']) ?><br>
+      <?php endif; ?>
+      <?php if ($soldStats['realized_from_savings'] != 0): ?>
+        🏦 Bunga tabungan: <?= pnlSign($soldStats['realized_from_savings']) . fmtIDR(abs($soldStats['realized_from_savings'])) ?><br>
+      <?php endif; ?>
+      <?php if ($soldStats['total_sold'] == 0 && $soldStats['realized_from_savings'] == 0): ?>
+        Belum ada realized PnL
+      <?php endif; ?>
+    </div>
+  </div>
+  <div class="stat-card" style="border-color:rgba(<?= $totalPnl>=0?'34,197,94':'239,68,68' ?>,0.3)">
+    <div class="stat-label">📊 Total PnL</div>
+    <div class="stat-value <?= pnlClass($totalPnl) ?>"><?= pnlSign($totalPnl) . fmtIDR($totalPnl) ?></div>
+    <div class="stat-sub">
+      Unrealized <?= pnlSign($upnl['net']) . fmtIDR($upnl['net']) ?>
+      + Realized <?= pnlSign($soldStats['total_realized_pnl']) . fmtIDR($soldStats['total_realized_pnl']) ?>
+    </div>
+  </div>
+  <?php if ($bestCat): ?>
+  <div class="stat-card">
+    <div class="stat-label">⭐ Best Performer</div>
+    <div class="stat-value green"><?= CATEGORIES[$bestCat]['icon'] ?> <?= CATEGORIES[$bestCat]['label'] ?></div>
+    <div class="stat-sub"><?= pnlSign($performers[$bestCat]) . number_format($performers[$bestCat], 2) ?>% return</div>
+  </div>
+  <?php endif; ?>
 </div>
 
 <!-- ═══════════════════════════════════════════════
