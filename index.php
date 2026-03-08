@@ -457,10 +457,16 @@ foreach (CATEGORIES as $cat => $cfg):
             <?php endif; ?>
             <?php
               $upnlInv = (float)($inv['unrealized_pnl'] ?? 0);
-              if ($upnlInv != 0):
+              $rpnlInv = (float)($inv['realized_pnl']   ?? 0);
             ?>
-            <div style="font-size:10px;margin-top:3px;color:var(--<?= pnlClass($upnlInv) ?>)">
-              Unrealized: <?= pnlSign($upnlInv) . fmtIDR(abs($upnlInv)) ?>
+            <?php if ($upnlInv != 0): ?>
+            <div style="font-size:10px;margin-top:2px;color:var(--<?= pnlClass($upnlInv) ?>)">
+              📈 <?= pnlSign($upnlInv) . fmtIDR(abs($upnlInv)) ?> <span style="color:var(--text3)">unreal.</span>
+            </div>
+            <?php endif; ?>
+            <?php if ($rpnlInv != 0): ?>
+            <div style="font-size:10px;margin-top:2px;color:var(--<?= pnlClass($rpnlInv) ?>)">
+              💰 <?= pnlSign($rpnlInv) . fmtIDR(abs($rpnlInv)) ?> <span style="color:var(--gold)">realized</span>
             </div>
             <?php endif; ?>
             <?php if (!$cfg['has_pnl'] && $cat === 'property' && $monthlyIncome): ?>
@@ -594,6 +600,7 @@ function doExportPDF() {
       'cost'          => getInvCost($inv),
       'value'         => getInvCurrentValue($inv, $cryptoPrices),
       'unrealized_pnl'=> (float)($inv['unrealized_pnl'] ?? 0),
+      'realized_pnl'  => (float)($inv['realized_pnl']   ?? 0),
       'date'          => $inv['inv_date'] ?? '—',
       'note'          => $inv['note'] ?? null,
       'monthly'       => ($cat === 'property') ? getPropertyMonthlyIncome($inv) : null,
