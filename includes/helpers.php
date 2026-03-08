@@ -74,7 +74,7 @@ function getInvestments(?string $cat = null): array {
 function getSellHistory(int $limit = 50): array {
     $db   = getDB();
     $stmt = $db->prepare("SELECT * FROM sell_history ORDER BY sell_date DESC, created_at DESC LIMIT ?");
-    $stmt->execute([$limit]);
+    $stmt->execute([(int)$limit]);
     return $stmt->fetchAll();
 }
 
@@ -300,7 +300,7 @@ function getCashLedger(int $limit = 30): array {
          ORDER BY cl.tx_date DESC, cl.created_at DESC
          LIMIT ?"
     );
-    $stmt->execute([$limit]);
+    $stmt->execute([(int)$limit]);
     return $stmt->fetchAll();
 }
 
@@ -383,4 +383,64 @@ function setMaintenance(bool $active, array $data = []): bool {
         }
         return true;
     } catch (Throwable $e) { return false; }
+}
+
+// ─────────────────────────────────────────────────────────────
+// MANUAL PnL — Keuntungan & Kerugian per investasi
+// ─────────────────────────────────────────────────────────────
+
+/** Ambil semua entri PnL manual untuk 1 investasi */
+
+// ─────────────────────────────────────────────────────────────
+// UNREALIZED PnL — satu nilai net per investasi
+// Disimpan di kolom investments.unrealized_pnl
+// Input: delta (hari ini +/-), disimpan: nilai kumulatif
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Tambah atau kurangi unrealized PnL satu investasi.
+ * $delta positif = keuntungan, negatif = kerugian.
+ * Nilai baru = unrealized_pnl + $delta
+ */
+function adjustUnrealizedPnl(int $invId, float $delta): float {
+    $db = getDB();
+    $db->prepare(
+        "UPDATE investments SET unrealized_pnl = COALESCE(unrealized_pnl, 0) + ? WHERE id = ?"
+    )->execute([$delta, $invId]);
+
+    $row = $db->prepare("SELECT unrealized_pnl FROM investments WHERE id = ?");
+    $row->execute([$invId]);
+    return (float)($row->fetch()['unrealized_pnl'] ?? 0);
+}
+
+/**
+ * Set unrealized PnL langsung ke nilai tertentu (override).
+ */
+function setUnrealizedPnl(int $invId, float $value): float {
+    getDB()->prepare(
+        "UPDATE investments SET unrealized_pnl = ? WHERE id = ?"
+    )->execute([$value, $invId]);
+    return $value;
+}
+
+/**
+ * Total unrealized PnL semua investasi (untuk overview).
+ * Exclude savings (nabung) karena keuntungannya realized.
+ */
+function getTotalUnrealizedPnl(): array {
+    try {
+        $row = getDB()->query(
+            "SELECT
+               COALESCE(SUM(CASE WHEN unrealized_pnl > 0 THEN unrealized_pnl ELSE 0 END), 0) AS total_profit,
+               COALESCE(SUM(CASE WHEN unrealized_pnl < 0 THEN unrealized_pnl ELSE 0 END), 0) AS total_loss,
+               COALESCE(SUM(unrealized_pnl), 0) AS net
+             FROM investments
+             WHERE is_sold = 0 AND category != 'savings'"
+        )->fetch();
+        return [
+            'profit' => (float)$row['total_profit'],
+            'loss'   => abs((float)$row['total_loss']),
+            'net'    => (float)$row['net'],
+        ];
+    } catch (Throwable) { return ['profit'=>0,'loss'=>0,'net'=>0]; }
 }
