@@ -122,6 +122,16 @@ $bestCat = array_key_first($performers) ?? null;
     <div class="stat-value cyan"><?= count($catData['crypto']['invs']) ?> aset</div>
     <div class="stat-sub">Harga update real-time</div>
   </div>
+  <?php $upnl = getTotalUnrealizedPnl(); ?>
+  <div class="stat-card" style="border-color:rgba(<?= $upnl['net']>=0?'34,197,94':'239,68,68' ?>,0.3)">
+    <div class="stat-label">💹 Net Unrealized PnL</div>
+    <div class="stat-value <?= pnlClass($upnl['net']) ?>"><?= pnlSign($upnl['net']) . fmtIDR($upnl['net']) ?></div>
+    <div class="stat-sub">
+      <span style="color:var(--green)">+<?= fmtIDR($upnl['profit']) ?></span>
+      / <span style="color:var(--red)">-<?= fmtIDR($upnl['loss']) ?></span><br>
+      <span style="font-size:10px">Belum terealisasi</span>
+    </div>
+  </div>
 </div>
 
 <!-- ═══════════════════════════════════════════════
@@ -425,7 +435,16 @@ foreach (CATEGORIES as $cat => $cfg):
             <div class="inv-pnl" style="color:var(--<?= pnlClass($pnl) ?>)">
               <?= pnlSign($pnl) . fmtIDR($pnl) ?> (<?= pnlSign($pnlPct) . number_format($pnlPct,2) ?>%)
             </div>
-            <?php elseif ($cat === 'property' && $monthlyIncome): ?>
+            <?php endif; ?>
+            <?php
+              $upnlInv = (float)($inv['unrealized_pnl'] ?? 0);
+              if ($upnlInv != 0):
+            ?>
+            <div style="font-size:10px;margin-top:3px;color:var(--<?= pnlClass($upnlInv) ?>)">
+              Unrealized: <?= pnlSign($upnlInv) . fmtIDR(abs($upnlInv)) ?>
+            </div>
+            <?php endif; ?>
+            <?php if (!$cfg['has_pnl'] && $cat === 'property' && $monthlyIncome): ?>
             <div class="inv-pnl" style="color:var(--green)">+<?= fmtIDR($monthlyIncome) ?>/bln</div>
             <?php endif; ?>
           </div>
