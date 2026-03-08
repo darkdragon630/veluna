@@ -179,21 +179,23 @@ function exportPDF(tableData, stats, targets, filename, extras) {
     setFont('bold', 8, C.text3);
     doc.text('RINGKASAN PORTOFOLIO', M + 6, y + 8);
 
+    const unrealNet  = extras?.unrealizedStats?.net  || 0;
+    const realPnl    = extras?.soldStats?.total_realized_pnl || 0;
+    const totalPnl2  = extras?.totalPnl ?? (unrealNet + realPnl);
     const sumItems = [
       { label: 'Total Nilai Portofolio', val: fmtIDR(stats.totalValue, false), color: C.gold },
       { label: 'Total Modal Aktif',      val: fmtIDR(stats.totalCost, false),  color: C.text },
-      { label: 'Total PnL',              val: `${pnlSign(stats.pnl)}${fmtIDR(stats.pnl, false)} (${pnlSign(stats.pnlPct)}${parseFloat(stats.pnlPct).toFixed(2)}%)`,
-        color: stats.pnl >= 0 ? C.green : C.red },
+      { label: 'Unrealized PnL',         val: `${pnlSign(unrealNet)}${fmtIDR(unrealNet, false)}`, color: unrealNet >= 0 ? C.green : C.red },
+      { label: 'Realized PnL',           val: `${pnlSign(realPnl)}${fmtIDR(realPnl, false)}`,    color: C.gold },
+      { label: 'Total PnL',              val: `${pnlSign(totalPnl2)}${fmtIDR(totalPnl2, false)}`,color: totalPnl2 >= 0 ? C.green : C.red },
+      { label: 'Saldo Kas',              val: fmtIDR(extras?.cashBalance || 0, false),            color: C.green },
     ];
-    if (extras?.cashBalance !== undefined) {
-      sumItems.push({ label: 'Saldo Kas', val: fmtIDR(extras.cashBalance, false), color: C.green });
-    }
 
     sumItems.forEach((item, i) => {
-      const col  = i < 2 ? M + 4 : M + cW/2 + 4;
-      const rowY = y + 18 + (i % 2) * 14;
-      setFont('normal', 7.5, C.text3); doc.text(item.label, col, rowY);
-      setFont('bold', 9, item.color);  doc.text(item.val,   col, rowY + 6.5);
+      const col  = M + 4 + (i % 3) * (cW / 3);
+      const rowY = y + 14 + Math.floor(i / 3) * 16;
+      setFont('normal', 7, C.text3); doc.text(item.label, col, rowY);
+      setFont('bold', 8.5, item.color); doc.text(item.val, col, rowY + 6);
     });
 
     // Target total progress bar
@@ -307,14 +309,14 @@ function exportPDF(tableData, stats, targets, filename, extras) {
 
       let cols, headers;
       if (isSavings) {
-        cols    = [M, M+70, M+115, M+155];
-        headers = ['Nama / Keterangan','Modal (Rp)','Nilai Saat Ini (Rp)','Tanggal'];
+        cols    = [M, M+58, M+100, M+138, M+162];
+        headers = ['Nama / Keterangan','Modal (Rp)','Nilai Saat Ini (Rp)','Bunga (Realized)','Tanggal'];
       } else if (isProp) {
         cols    = [M, M+60, M+100, M+138, M+165];
         headers = ['Nama','Modal (Rp)','Pendapatan/Bln','Yield/Thn','Tgl Beli'];
       } else {
-        cols    = [M, M+48, M+82, M+112, M+142, M+163];
-        headers = ['Nama','Ticker','Qty / Lot','Modal (Rp)','Nilai Saat Ini','PnL'];
+        cols    = [M, M+44, M+76, M+104, M+130, M+152, M+170];
+        headers = ['Nama','Ticker','Qty','Modal (Rp)','Nilai','PnL','Unreal.'];
       }
 
       fillRect(M, y, cW, 7, C.surface2);
@@ -329,10 +331,13 @@ function exportPDF(tableData, stats, targets, filename, extras) {
         const pnl = (inv.value || 0) - (inv.cost || 0);
 
         if (isSavings) {
-          setFont('normal', 7.5, C.text);     doc.text((inv.name||'—').slice(0,30), cols[0]+2, y+4.8);
-          setFont('normal', 7.5, C.text);     doc.text(fmtIDR(inv.cost,false).slice(0,20), cols[1]+2, y+4.8);
-          setFont('normal', 7.5, C.text);     doc.text(fmtIDR(inv.value,false).slice(0,20), cols[2]+2, y+4.8);
-          setFont('normal', 7, C.text3);       doc.text(inv.date||'—', cols[3]+2, y+4.8);
+          const upnlSav = inv.unrealized_pnl || 0;
+          setFont('normal', 7.5, C.text);     doc.text((inv.name||'—').slice(0,28), cols[0]+2, y+4.8);
+          setFont('normal', 7.5, C.text);     doc.text(fmtIDR(inv.cost,false).slice(0,18), cols[1]+2, y+4.8);
+          setFont('normal', 7.5, C.text);     doc.text(fmtIDR(inv.value,false).slice(0,18), cols[2]+2, y+4.8);
+          setFont('bold', 7.5, upnlSav>=0?C.green:C.red);
+          doc.text(upnlSav!=0 ? `${pnlSign(upnlSav)}${fmtIDR(upnlSav,false)}` : '—', cols[3]+2, y+4.8);
+          setFont('normal', 7, C.text3);       doc.text(inv.date||'—', cols[4]+2, y+4.8);
         } else if (isProp) {
           setFont('normal', 7.5, C.text);     doc.text((inv.name||'—').slice(0,22), cols[0]+2, y+4.8);
           setFont('normal', 7.5, C.text);     doc.text(fmtIDR(inv.cost,false).slice(0,18), cols[1]+2, y+4.8);
@@ -340,14 +345,22 @@ function exportPDF(tableData, stats, targets, filename, extras) {
           setFont('bold', 7.5, C.gold);       doc.text(inv.yieldAnn ? inv.yieldAnn.toFixed(2)+'%' : '—', cols[3]+2, y+4.8);
           setFont('normal', 7, C.text3);       doc.text(inv.date||'—', cols[4]+2, y+4.8);
         } else {
-          setFont('normal', 7.5, C.text);     doc.text((inv.name||'—').slice(0,22), cols[0]+2, y+4.8);
-          setFont('normal', 7.5, C.cyan);     doc.text((inv.ticker||'—').slice(0,10), cols[1]+2, y+4.8);
-          setFont('normal', 7, C.text2);       doc.text(inv.qty ? fmtNum(inv.qty)+(isStock?' lot':'') : '—', cols[2]+2, y+4.8);
-          setFont('normal', 7.5, C.text);     doc.text(fmtIDR(inv.cost,false).slice(0,16), cols[3]+2, y+4.8);
-          setFont('normal', 7.5, C.text);     doc.text(fmtIDR(inv.value,false).slice(0,16), cols[4]+2, y+4.8);
+          const upnlInv = inv.unrealized_pnl || 0;
+          setFont('normal', 7, C.text);       doc.text((inv.name||'—').slice(0,20), cols[0]+2, y+4.8);
+          setFont('normal', 7, C.cyan);       doc.text((inv.ticker||'—').slice(0,8), cols[1]+2, y+4.8);
+          setFont('normal', 7, C.text2);      doc.text(inv.qty ? fmtNum(inv.qty)+(isStock?' lot':'') : '—', cols[2]+2, y+4.8);
+          setFont('normal', 7, C.text);       doc.text(fmtIDR(inv.cost,false).slice(0,14), cols[3]+2, y+4.8);
+          setFont('normal', 7, C.text);       doc.text(fmtIDR(inv.value,false).slice(0,14), cols[4]+2, y+4.8);
           if (rows.hasPnl) {
-            setFont('bold', 7.5, pnl>=0?C.green:C.red);
-            doc.text(`${pnlSign(pnl)}${fmtIDR(pnl,false)}`.slice(0,16), cols[5]+2, y+4.8);
+            setFont('bold', 7, pnl>=0?C.green:C.red);
+            doc.text(`${pnlSign(pnl)}${fmtIDR(pnl,false)}`.slice(0,12), cols[5]+2, y+4.8);
+          }
+          if (upnlInv !== 0) {
+            setFont('bold', 7, upnlInv>=0?C.green:C.red);
+            doc.text(`${pnlSign(upnlInv)}${fmtIDR(upnlInv,false)}`.slice(0,12), cols[6]+2, y+4.8);
+          } else {
+            setFont('normal', 6.5, C.text3);
+            doc.text('—', cols[6]+2, y+4.8);
           }
         }
 
@@ -449,6 +462,33 @@ function exportPDF(tableData, stats, targets, filename, extras) {
         y += 7;
       });
       y += 4;
+    }
+
+    // PnL Summary Box
+    if (extras?.unrealizedStats) {
+      line(M, y, W-M, C.goldDim); y += 8;
+      setFont('bold', 8, C.text3); doc.text('RINGKASAN PnL', M, y); y += 5;
+
+      const pnlRows = [
+        ['Unrealized PnL (posisi aktif)',     extras.unrealizedStats.net,                extras.unrealizedStats.net >= 0 ? C.green : C.red],
+        ['  Profit belum realisasi',          extras.unrealizedStats.profit,             C.green],
+        ['  Loss belum realisasi',            -extras.unrealizedStats.loss,              C.red],
+        ['Realized PnL (jual + bunga nabung)',extras.soldStats.total_realized_pnl,       C.gold],
+        ['  Dari transaksi jual',             extras.soldStats.realized_from_sell || 0,  C.gold],
+        ['  Bunga / keuntungan tabungan',     extras.soldStats.realized_from_savings||0, C.green],
+        ['TOTAL PnL',                         extras.totalPnl,                           extras.totalPnl >= 0 ? C.green : C.red],
+      ];
+
+      pnlRows.forEach((row, i) => {
+        if (i % 2 === 0) fillRect(M, y, cW, 7, [14,17,23]);
+        const isBold = row[0] === 'TOTAL PnL' || (!row[0].startsWith('  ') && i < 6);
+        setFont(isBold ? 'bold' : 'normal', 7.5, i < 6 ? C.text2 : C.text3);
+        doc.text(row[0], M+2, y+4.8);
+        setFont('bold', 8, row[2]);
+        doc.text(`${pnlSign(row[1])}${fmtIDR(row[1],false)}`, M+130, y+4.8);
+        y += 7;
+      });
+      y += 6;
     }
 
     // Disclaimer
