@@ -8,23 +8,25 @@ require_once __DIR__ . '/../includes/helpers.php';
 header('Content-Type: application/json');
 if (!isLoggedIn()) { echo json_encode(['success'=>false,'error'=>'Unauthorized']); exit; }
 
-$method = $_SERVER['REQUEST_METHOD'];
-
 /**
- * POST { investment_id, delta }
- * delta: positif = tambah untung, negatif = tambah rugi
- * Nilai disimpan kumulatif di investments.unrealized_pnl
+ * POST {
+ *   investment_id: int,
+ *   kind: 'unrealized' | 'realized',
+ *   delta: float  (+ untung, - rugi)
+ * }
  */
-if ($method === 'POST') {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $body  = json_decode(file_get_contents('php://input'), true) ?? [];
     $invId = (int)($body['investment_id'] ?? 0);
+    $kind  = $body['kind'] ?? 'unrealized';
     $delta = (float)($body['delta'] ?? 0);
 
-    if (!$invId) { echo json_encode(['success'=>false,'error'=>'investment_id required']); exit; }
-    if ($delta == 0) { echo json_encode(['success'=>false,'error'=>'Delta tidak boleh 0']); exit; }
+    if (!$invId)                                { echo json_encode(['success'=>false,'error'=>'investment_id required']); exit; }
+    if (!in_array($kind, ['unrealized','realized'])) { echo json_encode(['success'=>false,'error'=>'kind harus unrealized atau realized']); exit; }
+    if ($delta == 0)                            { echo json_encode(['success'=>false,'error'=>'Delta tidak boleh 0']); exit; }
 
-    $newVal = adjustUnrealizedPnl($invId, $delta);
-    echo json_encode(['success'=>true,'unrealized_pnl'=>$newVal]);
+    $vals = adjustInvPnl($invId, $kind, $delta);
+    echo json_encode(['success'=>true] + $vals);
     exit;
 }
 
