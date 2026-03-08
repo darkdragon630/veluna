@@ -9,6 +9,7 @@ $isLoggedIn = true; // confirmed by requireLogin()
 $cryptoPrices = getCryptoPrices();
 $allStats     = getAllStats($cryptoPrices);
 $cashStats    = getCashStats();
+$unrealizedStats = getTotalUnrealizedPnl();
 $cashLedger   = getCashLedger(40);
 $maintenance  = getMaintenance();
 
@@ -124,6 +125,7 @@ foreach (CATEGORIES as $cat => $cfg) {
           <th class="td-right">Nilai Saat Ini</th>
           <?php if ($cfg['has_pnl']): ?>
             <th class="td-right">PnL</th><th class="td-right">PnL%</th>
+            <th class="td-right">Unrealized</th>
           <?php elseif ($cat === 'property'): ?>
             <th class="td-right">Pendapatan/Bln</th><th class="td-right">Yield/Thn</th>
           <?php else: ?><th colspan="2">—</th><?php endif; ?>
@@ -185,6 +187,18 @@ foreach (CATEGORIES as $cat => $cfg) {
           <?php if ($cfg['has_pnl']): ?>
           <td class="td-right td-mono" style="color:var(--<?= pnlClass($pnl) ?>)"><?= pnlSign($pnl) . fmtIDR($pnl) ?></td>
           <td class="td-right td-mono" style="color:var(--<?= pnlClass($pnl) ?>)"><?= pnlSign($pnlPct) . number_format($pnlPct,2) ?>%</td>
+          <?php
+            $upnl = (float)($inv['unrealized_pnl'] ?? 0);
+          ?>
+          <td class="td-right td-mono" style="color:var(--<?= pnlClass($upnl) ?>)">
+            <?php if ($upnl != 0): ?>
+              <span><?= pnlSign($upnl) . fmtIDR(abs($upnl)) ?></span><br>
+              <span style="font-size:9px;color:var(--text3)">Blm Realisasi</span>
+            <?php else: ?>
+              <button class="btn btn-outline btn-xs" style="font-size:9px;padding:2px 6px"
+                onclick="openPnlModal(<?= $inv['id'] ?>, '<?= htmlspecialchars(addslashes($inv['name'] ?: ($inv['ticker'] ?: 'Investasi'))) ?>', 0)">+ Catat</button>
+            <?php endif; ?>
+          </td>
           <?php elseif ($cat === 'property'): ?>
           <?php $mi = getPropertyMonthlyIncome($inv); $yi = getPropertyYield($inv); ?>
           <td class="td-right td-mono" style="color:var(--green)"><?= $mi > 0 ? fmtIDR($mi).'/bln' : '—' ?></td>
@@ -200,6 +214,14 @@ foreach (CATEGORIES as $cat => $cfg) {
                 'cost'=>$cost,'curVal'=>$curVal,'qty'=>$inv['qty']
               ])) ?>)">💸 Jual</button>
               <?php endif; ?>
+
+              <?php if ($cfg['has_pnl']): ?>
+              <?php $upnl2 = (float)($inv['unrealized_pnl'] ?? 0); ?>
+              <button class="btn btn-outline btn-xs"
+                style="color:var(--<?= pnlClass($upnl2) ?>)"
+                title="Catat Unrealized PnL"
+                onclick="openPnlModal(<?= $inv['id'] ?>, '<?= htmlspecialchars(addslashes($inv['name'] ?: ($inv['ticker'] ?: 'Investasi'))) ?>', <?= $upnl2 ?>)">±</button>
+              <?php endif; ?>
               <button class="btn btn-danger btn-xs" onclick="deleteInv(<?= $inv['id'] ?>, '<?= $cat ?>')">✕</button>
             </div>
           </td>
@@ -213,6 +235,34 @@ foreach (CATEGORIES as $cat => $cfg) {
 <?php endforeach; ?>
 
 
+
+<!-- ═══════════════════════════════════════════════
+     PnL SUMMARY — Unrealized & Realized
+════════════════════════════════════════════════ -->
+<div class="section-title" id="pnl-summary" style="margin-top:36px">📊 Ringkasan <span>PnL</span></div>
+<div class="stats-grid" style="margin-bottom:28px">
+  <div class="stat-card" style="border-color:rgba(34,197,94,0.3)">
+    <div class="stat-label">📈 Unrealized Profit</div>
+    <div class="stat-value green"><?= fmtIDR($unrealizedStats['profit']) ?></div>
+    <div class="stat-sub">Keuntungan belum terealisasi</div>
+  </div>
+  <div class="stat-card" style="border-color:rgba(239,68,68,0.3)">
+    <div class="stat-label">📉 Unrealized Loss</div>
+    <div class="stat-value red"><?= fmtIDR($unrealizedStats['loss']) ?></div>
+    <div class="stat-sub">Kerugian belum terealisasi</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">💹 Net Unrealized PnL</div>
+    <div class="stat-value <?= pnlClass($unrealizedStats['net']) ?>"><?= pnlSign($unrealizedStats['net']) . fmtIDR($unrealizedStats['net']) ?></div>
+    <div class="stat-sub">Posisi aktif (belum dijual)</div>
+  </div>
+  <div class="stat-card" style="border-color:rgba(240,180,41,0.3)">
+    <div class="stat-label">💸 Realized PnL (Jual)</div>
+    <?php $sold = getSoldStats(); ?>
+    <div class="stat-value gold"><?= pnlSign($sold['total_realized_pnl']) . fmtIDR($sold['total_realized_pnl']) ?></div>
+    <div class="stat-sub">Dari <?= $sold['total_sold'] ?> transaksi jual</div>
+  </div>
+</div>
 
 <!-- ═══════════════════════════════════════════════
      TARGET MANAGEMENT SECTION
@@ -1323,6 +1373,88 @@ document.addEventListener('DOMContentLoaded', () => {
   updateMaintPreview();
 });
 // ─────────────────────────────────────────────────────────
+
+
+
+// ──────────────────────────────────────────────────────────────
+// UNREALIZED PnL — satu nilai net per investasi
+// ──────────────────────────────────────────────────────────────
+let _pnlCurrentVal = 0;
+let _pnlType = 'profit'; // 'profit' | 'loss'
+
+function openPnlModal(invId, invName, currentVal) {
+  _pnlCurrentVal = parseFloat(currentVal) || 0;
+  _pnlType = 'profit';
+
+  document.getElementById('pnl-inv-id').value = invId;
+  document.getElementById('pnl-inv-name-title').textContent = invName;
+  document.getElementById('pnl-delta-amount').value = '';
+  document.getElementById('pnl-preview-box').style.display = 'none';
+
+  // Tampilkan nilai saat ini
+  const dispEl = document.getElementById('pnl-current-display');
+  dispEl.textContent = (_pnlCurrentVal >= 0 ? '+' : '') + fmtIDR(_pnlCurrentVal);
+  dispEl.style.color = _pnlCurrentVal > 0 ? 'var(--green)' : _pnlCurrentVal < 0 ? 'var(--red)' : 'var(--text)';
+
+  setPnlType('profit');
+  openModal('pnl-modal');
+}
+
+function setPnlType(type) {
+  _pnlType = type;
+  const btnProfit = document.getElementById('pnl-type-profit');
+  const btnLoss   = document.getElementById('pnl-type-loss');
+  if (type === 'profit') {
+    btnProfit.style.border  = '2px solid var(--green)';
+    btnProfit.style.color   = 'var(--green)';
+    btnLoss.style.border    = '2px solid var(--border)';
+    btnLoss.style.color     = 'var(--text3)';
+  } else {
+    btnLoss.style.border    = '2px solid var(--red)';
+    btnLoss.style.color     = 'var(--red)';
+    btnProfit.style.border  = '2px solid var(--border)';
+    btnProfit.style.color   = 'var(--text3)';
+  }
+  updatePnlPreview();
+}
+
+function updatePnlPreview() {
+  const raw    = document.getElementById('pnl-delta-amount').value;
+  const amount = parseIDR(raw);
+  const preBox = document.getElementById('pnl-preview-box');
+  const preVal = document.getElementById('pnl-preview-val');
+  if (!amount || isNaN(amount) || amount <= 0) { preBox.style.display = 'none'; return; }
+
+  const delta  = _pnlType === 'profit' ? amount : -amount;
+  const result = _pnlCurrentVal + delta;
+
+  preBox.style.display = 'block';
+  preVal.textContent   = (result >= 0 ? '+' : '') + fmtIDR(result);
+  preVal.style.color   = result > 0 ? 'var(--green)' : result < 0 ? 'var(--red)' : 'var(--text)';
+}
+
+async function savePnlEntry() {
+  const invId  = parseInt(document.getElementById('pnl-inv-id').value);
+  const raw    = document.getElementById('pnl-delta-amount').value;
+  const amount = parseIDR(raw);
+
+  if (!amount || isNaN(amount) || amount <= 0) {
+    toast('Masukkan nominal yang valid', 'error'); return;
+  }
+
+  const delta = _pnlType === 'profit' ? amount : -amount;
+  const res   = await api('pnl.php', 'POST', { investment_id: invId, delta });
+
+  if (res.success) {
+    const newVal = res.unrealized_pnl;
+    toast(`PnL diperbarui: ${newVal >= 0 ? '+' : ''}${fmtIDR(newVal)}`, 'success');
+    closeModal('pnl-modal');
+    setTimeout(() => location.reload(), 600);
+  } else {
+    toast('Gagal: ' + (res.error || ''), 'error');
+  }
+}
+
 
 <?php if ($preSellId && $preSellCat): ?>
 window.addEventListener('load', () => {
