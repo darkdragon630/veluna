@@ -591,12 +591,13 @@ function doExportPDF() {
       'name'    => ($inv['name']??'').($inv['ticker']?' ('.$inv['ticker'].')':''),
       'ticker'  => $inv['ticker'] ?? null,
       'qty'     => $inv['qty'] ?? null,
-      'cost'    => getInvCost($inv),
-      'value'   => getInvCurrentValue($inv, $cryptoPrices),
-      'date'    => $inv['inv_date'] ?? '—',
-      'note'    => $inv['note'] ?? null,
-      'monthly' => ($cat === 'property') ? getPropertyMonthlyIncome($inv) : null,
-      'yieldAnn'=> ($cat === 'property') ? getPropertyYield($inv) : null,
+      'cost'          => getInvCost($inv),
+      'value'         => getInvCurrentValue($inv, $cryptoPrices),
+      'unrealized_pnl'=> (float)($inv['unrealized_pnl'] ?? 0),
+      'date'          => $inv['inv_date'] ?? '—',
+      'note'          => $inv['note'] ?? null,
+      'monthly'       => ($cat === 'property') ? getPropertyMonthlyIncome($inv) : null,
+      'yieldAnn'      => ($cat === 'property') ? getPropertyYield($inv) : null,
     ], $d['invs'])
   , $catData, array_keys(CATEGORIES)))) ?>;
 
@@ -611,8 +612,11 @@ function doExportPDF() {
   }
   const now = new Date();
   const extras = {
-    cashBalance: <?= $cashStats['balance'] ?>,
-    cashStats: <?= json_encode($cashStats) ?>,
+    cashBalance:    <?= $cashStats['balance'] ?>,
+    cashStats:      <?= json_encode($cashStats) ?>,
+    unrealizedStats:<?= json_encode(getTotalUnrealizedPnl()) ?>,
+    soldStats:      <?= json_encode($soldStats) ?>,
+    totalPnl:       <?= $upnl['net'] + $soldStats['total_realized_pnl'] ?>,
   };
   exportPDF(tableData, allStats, targets,
     `PortoFolio_Overview_${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}_${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}.pdf`,
