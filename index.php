@@ -684,11 +684,11 @@ function updateCryptoDisplay() {
 
 setInterval(async () => {
   try {
-    const r = await fetch(BASE_URL + 'api/crypto.php?action=prices');
+    const r = await fetch(BASE_URL + 'api/crypto.php?action=auto');
     const d = await r.json();
     if (d.prices) { cryptoPrices = d.prices; updateCryptoDisplay(); }
   } catch(e) {}
-}, 8000);
+}, 65000);
 </script>
 
 <!-- ═══════════════════════════════════════════════
