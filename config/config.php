@@ -14,13 +14,22 @@ define('CURRENCY', 'IDR');
 define('COINGECKO_API', 'https://api.coingecko.com/api/v3');
 define('CRYPTO_CACHE_TTL', 60);
 
-ini_set('session.use_strict_mode','1');
-ini_set('session.use_only_cookies','1');
-ini_set('session.cookie_httponly','1');
-ini_set('session.cookie_samesite','Strict');
+define('SESSION_LIFETIME', 86400); // 24 jam
+
+ini_set('session.use_strict_mode',  '1');
+ini_set('session.use_only_cookies', '1');
+ini_set('session.cookie_httponly',  '1');
+ini_set('session.cookie_samesite',  'Strict');
+ini_set('session.gc_maxlifetime',   (string)SESSION_LIFETIME);
+ini_set('session.cookie_lifetime',  (string)SESSION_LIFETIME); // cookie tetap hidup 24 jam walau browser ditutup
 session_name(SESSION_NAME);
 if (session_status() === PHP_SESSION_NONE) {
-    session_set_cookie_params(['lifetime'=>0,'httponly'=>true,'samesite'=>'Strict']);
+    session_set_cookie_params([
+        'lifetime' => SESSION_LIFETIME,
+        'httponly' => true,
+        'samesite' => 'Strict',
+        'secure'   => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'),
+    ]);
     session_start();
 }
 
@@ -46,6 +55,11 @@ if (!isset($_SESSION['_ua_hash'])) {
 
 function isLoggedIn(): bool {
     if (!isset($_SESSION['pf_auth'], $_SESSION['pf_user_id'])) return false;
+    // Cek expiry server-side (24 jam sejak login)
+    if (isset($_SESSION['pf_expire_at']) && time() > $_SESSION['pf_expire_at']) {
+        session_destroy();
+        return false;
+    }
     try {
         $s = getDB()->prepare("SELECT id FROM auth_users WHERE id=?");
         $s->execute([$_SESSION['pf_user_id']]);
@@ -143,14 +157,22 @@ function verifyLogin(string $u, string $p): ?array {
     return null;
 }
 function loginUser(array $user): void {
+    // Set cookie lifetime sebelum regenerate agar cookie baru ikut 24 jam
+    session_set_cookie_params([
+        'lifetime' => SESSION_LIFETIME,
+        'httponly' => true,
+        'samesite' => 'Strict',
+        'secure'   => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'),
+    ]);
     session_regenerate_id(true);
-    $_SESSION['pf_auth']     = true;
-    $_SESSION['pf_user_id']  = $user['id'];
-    $_SESSION['pf_username'] = $user['username'];
-    $_SESSION['pf_token']    = bin2hex(random_bytes(16));
-    $_SESSION['pf_login_at'] = time();
-    $_SESSION['_last_regen'] = time();
-    $_SESSION['_ua_hash']    = md5(substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 80));
+    $_SESSION['pf_auth']      = true;
+    $_SESSION['pf_user_id']   = $user['id'];
+    $_SESSION['pf_username']  = $user['username'];
+    $_SESSION['pf_token']     = bin2hex(random_bytes(16));
+    $_SESSION['pf_login_at']  = time();
+    $_SESSION['pf_expire_at'] = time() + SESSION_LIFETIME; // hard expiry di server side
+    $_SESSION['_last_regen']  = time();
+    $_SESSION['_ua_hash']     = md5(substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 80));
 }
 if (!defined('ADMIN_USERNAME')) {
     // Jangan panggil getDB() di sini — bisa jalan sebelum database.php load
