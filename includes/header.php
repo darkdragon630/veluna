@@ -35,7 +35,7 @@ $isLoggedIn = $isLoggedIn ?? isLoggedIn();
     </div>
     <div class="nav-right">
       <?php if($isLoggedIn): ?>
-        <span class="nav-user">👤 <?= htmlspecialchars(ADMIN_USERNAME) ?></span>
+        <span class="nav-user">👤 <?= htmlspecialchars(resolveAdminUsername()) ?></span>
         <a href="<?= BASE_URL ?>dashboard.php" class="btn btn-outline btn-sm">📋 Kelola</a>
         <a href="<?= BASE_URL ?>logout.php" class="btn btn-outline btn-sm">⏏ Logout</a>
       <?php else: ?>
