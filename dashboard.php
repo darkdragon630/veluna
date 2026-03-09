@@ -1008,13 +1008,21 @@ function updateCryptoDashboard(newPrices) {
   });
 }
 
-setInterval(async () => {
+async function fetchAndUpdateCryptoDash() {
   try {
     const r = await fetch(BASE_URL + 'api/crypto.php?action=auto');
     const d = await r.json();
-    if (d.prices) updateCryptoDashboard(d.prices);
-  } catch(e) {}
-}, 65000);
+    if (d.prices && Object.keys(d.prices).length > 0) {
+      updateCryptoDashboard(d.prices);
+    }
+  } catch(e) { /* network error */ }
+}
+
+// Langsung update saat dashboard dibuka
+fetchAndUpdateCryptoDash();
+
+// Ulangi tiap 65 detik
+setInterval(fetchAndUpdateCryptoDash, 65000);
 
 // ---- FILTER ----
 function filterCat(cat, btn) {
@@ -1183,7 +1191,7 @@ async function saveInv() {
   try {
     const res = await api('investments.php', 'POST', payload);
     if (res.success) {
-      toast(id ? 'Investasi diperbarui ✅' : 'Investasi berhasil ditambahkan ✅', 'success');
+      toast(id ? 'Investasi diperbarui ✅' : 'Investasi berhasil ditambahkan', 'success');
       closeModal('add-modal');
       setTimeout(() => location.reload(), 600);
     } else { toast('Error: ' + (res.error||''), 'error'); }
