@@ -100,14 +100,16 @@ foreach (CATEGORIES as $cat => $cfg) {
       <?= $cfg['label'] ?>
       <span class="badge badge-neutral"><?= $stats['count'] ?></span>
       <?php if ($cfg['has_pnl']): ?>
-      <span class="badge badge-<?= pnlClass($stats['pnl']) ?>">
+      <span class="badge badge-<?= pnlClass($stats['pnl']) ?>"
+            style="color:var(--<?= pnlClass($stats['pnl']) ?>)"
+            id="dash-catbadge-<?= $cat ?>">
         PnL: <?= pnlSign($stats['pnl']) . fmtIDR($stats['pnl']) ?>
         (<?= pnlSign($stats['pnlPct']) . number_format($stats['pnlPct'],2) ?>%)
       </span>
       <?php endif; ?>
     </div>
     <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-      <span style="font-size:12px;color:var(--gold)">Total: <?= fmtIDR($stats['totalValue']) ?></span>
+      <span style="font-size:12px;color:var(--gold)" id="dash-cattotal-<?= $cat ?>">Total: <?= fmtIDR($stats['totalValue']) ?></span>
       <button class="btn btn-gold btn-sm" onclick="openAddModal('<?= $cat ?>')">+ Tambah</button>
     </div>
   </div>
@@ -977,6 +979,7 @@ let cryptoPrices = <?= json_encode($cryptoPrices) ?>;
 function updateCryptoDashboard(newPrices) {
   cryptoPrices = newPrices;
 
+  let _cryptoCatVal = 0, _cryptoCatCost = 0, _cryptoCatPnl = 0;
   document.querySelectorAll('tr[data-crypto-row]').forEach(row => {
     const coinId = row.dataset.coinId;
     const price  = newPrices[coinId];
@@ -1005,7 +1008,30 @@ function updateCryptoDashboard(newPrices) {
     if (valEl)   valEl.innerHTML   = '<strong>' + fmtIDR(curVal) + '</strong>';
     if (pnlEl)   { pnlEl.textContent = sign(pnl) + fmtIDR(pnl); pnlEl.style.color = pnlColor; }
     if (pctEl)   { pctEl.textContent = sign(pnlPct) + pnlPct.toFixed(2) + '%'; pctEl.style.color = pnlColor; }
+
+    // Akumulasi untuk update header kategori
+    _cryptoCatVal  += curVal;
+    _cryptoCatCost += cost;
+    _cryptoCatPnl  += pnl;
   });
+
+  // ── Update header kategori crypto (badge + total) ──
+  if (_cryptoCatCost > 0) {
+    const catPnlPct  = _cryptoCatPnl / _cryptoCatCost * 100;
+    const sign2      = v => v >= 0 ? '+' : '';
+    const catColor   = v => v > 0 ? 'var(--green)' : v < 0 ? 'var(--red)' : 'var(--text)';
+    const catCls     = v => v > 0 ? 'badge-green' : v < 0 ? 'badge-red' : 'badge-neutral';
+
+    const badgeEl = document.getElementById('dash-catbadge-crypto');
+    if (badgeEl) {
+      badgeEl.textContent = `PnL: ${sign2(_cryptoCatPnl)}${fmtIDR(_cryptoCatPnl)} (${sign2(catPnlPct)}${catPnlPct.toFixed(2)}%)`;
+      badgeEl.className   = 'badge ' + catCls(_cryptoCatPnl);
+      badgeEl.style.color = catColor(_cryptoCatPnl);
+    }
+
+    const totalEl = document.getElementById('dash-cattotal-crypto');
+    if (totalEl) totalEl.textContent = 'Total: ' + fmtIDR(_cryptoCatVal);
+  }
 }
 
 async function fetchAndUpdateCryptoDash() {
@@ -1191,7 +1217,7 @@ async function saveInv() {
   try {
     const res = await api('investments.php', 'POST', payload);
     if (res.success) {
-      toast(id ? 'Investasi diperbarui ✅' : 'Investasi berhasil ditambahkan', 'success');
+      toast(id ? 'Investasi diperbarui ✅' : 'Investasi berhasil ditambahkan ✅', 'success');
       closeModal('add-modal');
       setTimeout(() => location.reload(), 600);
     } else { toast('Error: ' + (res.error||''), 'error'); }
