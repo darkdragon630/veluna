@@ -9,7 +9,7 @@ define('CATEGORIES', [
     'stocks'      => ['label' => 'Saham',             'icon' => '📈',  'color' => '#f97316', 'has_pnl' => true],
     'mutualFunds' => ['label' => 'Reksa Dana',        'icon' => '📦',  'color' => '#a855f7', 'has_pnl' => true],
     'crypto'      => ['label' => 'Crypto',            'icon' => '₿',   'color' => '#f0b429', 'has_pnl' => true],
-    'property'    => ['label' => 'Properti',          'icon' => '🏠',  'color' => '#ef4444', 'has_pnl' => false], // pakai ROI yield bulanan
+    'property'    => ['label' => 'Properti',          'icon' => '🏠',  'color' => '#ef4444', 'has_pnl' => true],  // bagi hasil = realized PnL
 ]);
 
 define('COIN_MAP', [
@@ -195,9 +195,13 @@ function getInvCurrentValue(array $inv, array $cryptoPrices): float {
         return $amount;
     }
 
-    // Properti tokenisasi: nilai portofolio = modal awal (harga beli token)
-    // current_value dipakai untuk menyimpan pendapatan per bulan
-    if ($cat === 'property') return (float)($inv['buy_price'] ?? $amount);
+    // Properti tokenisasi: nilai = modal + unrealized_pnl (kenaikan harga token)
+    // current_value dipakai untuk menyimpan pendapatan per bulan (tidak mempengaruhi nilai)
+    if ($cat === 'property') {
+        $base  = (float)($inv['buy_price'] ?? $amount);
+        $upnl  = (float)($inv['unrealized_pnl'] ?? 0);
+        return $base + $upnl;
+    }
 
     return $amount;
 }
@@ -244,14 +248,22 @@ function getPropertyYield(array $inv): float {
 /** Stats per kategori — PnL = sum(currentValue) - sum(cost) */
 function getCatStats(string $cat, array $cryptoPrices): array {
     $invs = getInvestments($cat);
-    $totalCost = 0; $totalValue = 0;
+    $totalCost = 0; $totalValue = 0; $totalRealized = 0;
     foreach ($invs as $inv) {
-        $totalCost  += getInvCost($inv);
-        $totalValue += getInvCurrentValue($inv, $cryptoPrices);
+        $totalCost     += getInvCost($inv);
+        $totalValue    += getInvCurrentValue($inv, $cryptoPrices);
+        // Realized PnL (dividen/bunga/staking/bagi hasil) — sudah diterima, masuk total return
+        $totalRealized += (float)($inv['realized_pnl'] ?? 0);
     }
-    $pnl    = $totalValue - $totalCost;
-    $pnlPct = $totalCost > 0 ? ($pnl / $totalCost * 100) : 0;
-    return compact('totalCost','totalValue','pnl','pnlPct') + ['count' => count($invs)];
+    // Total PnL = kenaikan harga (value - cost) + yang sudah diterima (realized)
+    $pricePnl = $totalValue - $totalCost;
+    $pnl      = $pricePnl + $totalRealized;
+    $pnlPct   = $totalCost > 0 ? ($pnl / $totalCost * 100) : 0;
+    return compact('totalCost','totalValue','pnl','pnlPct') + [
+        'count'          => count($invs),
+        'pricePnl'       => $pricePnl,
+        'totalRealized'  => $totalRealized,
+    ];
 }
 
 /**
@@ -259,22 +271,28 @@ function getCatStats(string $cat, array $cryptoPrices): array {
  * Kategori profit berkontribusi positif, kategori loss berkontribusi negatif.
  */
 function getAllStats(array $cryptoPrices): array {
-    $totalCost  = 0;
-    $totalValue = 0;
-    $totalPnl   = 0;
+    $totalCost     = 0;
+    $totalValue    = 0;
+    $totalPnl      = 0;
+    $totalRealized = 0;
+    $totalPricePnl = 0;
 
     foreach (array_keys(CATEGORIES) as $cat) {
         $s = getCatStats($cat, $cryptoPrices);
-        $totalCost  += $s['totalCost'];
-        $totalValue += $s['totalValue'];
-        $totalPnl   += $s['pnl'];  // profit kategori + (loss kategori -)
+        $totalCost     += $s['totalCost'];
+        $totalValue    += $s['totalValue'];
+        $totalPnl      += $s['pnl'];
+        $totalRealized += $s['totalRealized'] ?? 0;
+        $totalPricePnl += $s['pricePnl']      ?? $s['pnl'];
     }
     $pnlPct = $totalCost > 0 ? ($totalPnl / $totalCost * 100) : 0;
     return [
-        'totalCost'  => $totalCost,
-        'totalValue' => $totalValue,
-        'pnl'        => $totalPnl,
-        'pnlPct'     => $pnlPct,
+        'totalCost'     => $totalCost,
+        'totalValue'    => $totalValue,
+        'pnl'           => $totalPnl,
+        'pnlPct'        => $pnlPct,
+        'totalRealized' => $totalRealized,
+        'totalPricePnl' => $totalPricePnl,
     ];
 }
 
