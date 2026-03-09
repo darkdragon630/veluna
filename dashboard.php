@@ -231,11 +231,15 @@ foreach (CATEGORIES as $cat => $cfg) {
                 onclick="openPnlModal(<?= $inv['id'] ?>, '<?= htmlspecialchars(addslashes($inv['name'] ?: ($inv['ticker'] ?: 'Investasi'))) ?>', <?= $upnl2 ?>, <?= $rpnl2 ?>, '<?= $cat ?>')">±</button>
               <?php endif; ?>
               <?php if ($cat === 'crypto'): ?>
-              <?php $rpnl2 = (float)($inv['realized_pnl'] ?? 0); ?>
+              <?php
+                $rpnl2   = (float)($inv['realized_pnl'] ?? 0);
+                $coinId2 = $inv['coin_id'] ?? getCoinId($inv['ticker'] ?? '');
+                $curQty2 = (float)($inv['qty'] ?? 0);
+              ?>
               <button class="btn btn-outline btn-xs"
                 style="color:var(--gold)"
                 title="Catat Staking/Reward"
-                onclick="openPnlModal(<?= $inv['id'] ?>, '<?= htmlspecialchars(addslashes($inv['name'] ?: ($inv['ticker'] ?: 'Investasi'))) ?>', 0, <?= $rpnl2 ?>, 'crypto')">💰</button>
+                onclick="openPnlModal(<?= $inv['id'] ?>, '<?= htmlspecialchars(addslashes($inv['name'] ?: ($inv['ticker'] ?: 'Investasi'))) ?>', 0, <?= $rpnl2 ?>, 'crypto', '<?= $coinId2 ?>', <?= $curQty2 ?>)">💰</button>
               <?php endif; ?>
               <button class="btn btn-danger btn-xs" onclick="deleteInv(<?= $inv['id'] ?>, '<?= $cat ?>')">✕</button>
             </div>
@@ -659,9 +663,9 @@ $totalProg   = $totalTarget > 0 ? min($allStats['totalValue']/$totalTarget*100,1
     </div>
 
     <!-- Untung / Rugi -->
-    <div style="margin-bottom:12px">
+    <div id="pnl-type-wrap" style="margin-bottom:12px">
       <label class="form-label">Perubahan</label>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div id="pnl-type-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
         <button class="btn" id="pnl-type-profit"
           style="border:2px solid var(--green);color:var(--green);padding:9px;font-weight:600"
           onclick="setPnlType('profit')">✅ Untung</button>
@@ -670,6 +674,10 @@ $totalProg   = $totalTarget > 0 ? min($allStats['totalValue']/$totalTarget*100,1
           onclick="setPnlType('loss')">❌ Rugi</button>
       </div>
     </div>
+
+    <div id="pnl-qty-hint" style="display:none;font-size:11px;color:var(--gold);
+         background:var(--surface2);border:1px solid var(--border);border-radius:6px;
+         padding:7px 12px;margin-bottom:10px"></div>
 
     <div style="margin-bottom:8px">
       <label class="form-label">Nominal (Rp)</label>
@@ -1492,21 +1500,25 @@ const REALIZED_DEFAULT_CATS = ['savings', 'property'];
 
 let _pnlCurrentUnrealized = 0;
 let _pnlCurrentRealized   = 0;
-let _pnlType = 'profit';   // 'profit' | 'loss'
-let _pnlKind = 'unrealized'; // 'unrealized' | 'realized'
-let _pnlCat  = '';
+let _pnlType   = 'profit';
+let _pnlKind   = 'unrealized';
+let _pnlCat    = '';
+let _pnlCoinId = '';
+let _pnlCurQty = 0;
 
-// Kategori yang hanya punya realized (tidak perlu pilih jenis)
+// Kategori only-realized: tidak perlu pilih jenis
 const ONLY_REALIZED_CATS = ['savings', 'crypto'];
+// Kategori no-loss: tidak mungkin rugi dari bunga/staking
+const NO_LOSS_CATS = ['savings', 'crypto'];
 
-function openPnlModal(invId, invName, currentUnrealized, currentRealized, cat) {
+function openPnlModal(invId, invName, currentUnrealized, currentRealized, cat, coinId, currentQty) {
   _pnlCurrentUnrealized = parseFloat(currentUnrealized) || 0;
   _pnlCurrentRealized   = parseFloat(currentRealized)   || 0;
   _pnlCat  = cat || '';
   _pnlType = 'profit';
 
   document.getElementById('pnl-inv-id').value  = invId;
-  document.getElementById('pnl-inv-cat').value = cat || '';
+  document.getElementById('pnl-inv-cat').value  = cat || '';
   document.getElementById('pnl-inv-name-title').textContent = invName;
   document.getElementById('pnl-delta-amount').value = '';
   document.getElementById('pnl-preview-box').style.display = 'none';
@@ -1522,18 +1534,43 @@ function openPnlModal(invId, invName, currentUnrealized, currentRealized, cat) {
 
   // Label realized sesuai kategori
   const rlabel = REALIZED_LABELS[cat] || 'Dividen / bunga / staking';
-  document.getElementById('pnl-realized-label').textContent     = rlabel;
-  document.getElementById('pnl-kind-realized-hint').textContent  = rlabel;
+  document.getElementById('pnl-realized-label').textContent    = rlabel;
+  document.getElementById('pnl-kind-realized-hint').textContent = rlabel;
 
-  // Sembunyikan pilihan Unrealized untuk kategori only-realized
-  // (savings: hanya bunga, crypto: hanya staking — unrealized dari API)
   const onlyRealized = ONLY_REALIZED_CATS.includes(cat);
-  document.getElementById('pnl-kind-wrap').style.display = onlyRealized ? 'none' : 'block';
+
+  // Sembunyikan pilihan Unrealized & kotak unrealized untuk only-realized
+  document.getElementById('pnl-kind-wrap').style.display     = onlyRealized ? 'none' : 'block';
   document.getElementById('pnl-unrealized-box').style.display = onlyRealized ? 'none' : 'block';
 
-  // Default kind
-  const defaultKind = onlyRealized ? 'realized' : 'unrealized';
-  setPnlKind(defaultKind);
+  // Sembunyikan tombol Rugi untuk kategori no-loss (bunga/staking selalu positif)
+  const lossBtn = document.getElementById('pnl-type-loss');
+  lossBtn.style.display = NO_LOSS_CATS.includes(cat) ? 'none' : '';
+  document.getElementById('pnl-type-grid').style.gridTemplateColumns =
+    NO_LOSS_CATS.includes(cat) ? '1fr' : '1fr 1fr';
+
+  // Simpan coin info untuk crypto staking
+  _pnlCoinId  = coinId   || '';
+  _pnlCurQty  = parseFloat(currentQty) || 0;
+
+  // Hint qty untuk crypto
+  const qtyHintEl = document.getElementById('pnl-qty-hint');
+  if (cat === 'crypto' && qtyHintEl) {
+    const price = cryptoPrices[coinId] || 0;
+    if (price > 0) {
+      qtyHintEl.style.display = 'block';
+      qtyHintEl.textContent   = `Harga saat ini: ${fmtIDR(price)} — Qty koin akan ditambah otomatis`;
+    } else {
+      qtyHintEl.style.display = 'block';
+      qtyHintEl.textContent   = 'Qty koin akan dihitung dari harga live CoinGecko';
+    }
+  } else if (qtyHintEl) {
+    qtyHintEl.style.display = 'none';
+  }
+
+  // Set kind SEBELUM openModal agar _pnlKind sudah benar
+  _pnlKind = onlyRealized ? 'realized' : 'unrealized';
+  setPnlKind(_pnlKind);
   setPnlType('profit');
   openModal('pnl-modal');
 }
@@ -1579,8 +1616,19 @@ function updatePnlPreview() {
   const label   = _pnlKind === 'unrealized' ? 'Unrealized' : 'Realized';
 
   preBox.style.display = 'block';
-  preVal.textContent   = `${label}: ${result >= 0 ? '+' : ''}${fmtIDR(result)}`;
-  preVal.style.color   = result > 0 ? 'var(--green)' : result < 0 ? 'var(--red)' : 'var(--text)';
+
+  if (_pnlCat === 'crypto' && _pnlKind === 'realized' && amount > 0) {
+    const price    = cryptoPrices[_pnlCoinId] || 0;
+    const qtyAdded = price > 0 ? (amount / price) : 0;
+    const newQty   = _pnlCurQty + qtyAdded;
+    const qtyStr   = qtyAdded > 0
+      ? ` | +${fmtNum(qtyAdded, 8)} koin → total ${fmtNum(newQty, 8)}`
+      : ' | harga live tidak tersedia';
+    preVal.textContent = `Realized: +${fmtIDR(result)}${qtyStr}`;
+  } else {
+    preVal.textContent = `${label}: ${result >= 0 ? '+' : ''}${fmtIDR(result)}`;
+  }
+  preVal.style.color = result > 0 ? 'var(--green)' : result < 0 ? 'var(--red)' : 'var(--text)';
 }
 
 async function savePnlEntry() {
@@ -1592,17 +1640,31 @@ async function savePnlEntry() {
     toast('Masukkan nominal yang valid', 'error'); return;
   }
 
-  const delta = _pnlType === 'profit' ? amount : -amount;
-  const res   = await api('pnl.php', 'POST', { investment_id: invId, kind: _pnlKind, delta });
+  const delta   = _pnlType === 'profit' ? amount : -amount;
+  const payload = { investment_id: invId, kind: _pnlKind, delta };
+
+  // Crypto staking: kirim harga live agar server bisa hitung qty
+  if (_pnlCat === 'crypto' && _pnlKind === 'realized') {
+    const price = cryptoPrices[_pnlCoinId] || 0;
+    if (price > 0) {
+      payload.coin_id    = _pnlCoinId;
+      payload.price_idr  = price;
+      payload.add_qty    = true;
+    }
+  }
+
+  const res = await api('pnl.php', 'POST', payload);
 
   if (res.success) {
     const val   = _pnlKind === 'unrealized' ? res.unrealized_pnl : res.realized_pnl;
     const label = _pnlKind === 'unrealized' ? 'Unrealized' : 'Realized';
-    toast(`${label} PnL: ${val >= 0 ? '+' : ''}${fmtIDR(val)} ✅`, 'success');
+    let msg = `${label} PnL: ${val >= 0 ? '+' : ''}${fmtIDR(val)} ✅`;
+    if (res.new_qty) msg += ` | Qty: ${fmtNum(res.new_qty, 8)}`;
+    toast(msg, 'success');
     closeModal('pnl-modal');
     setTimeout(() => location.reload(), 600);
   } else {
-    toast('Gagal: ' + (res.error || ''), 'error');
+    toast('Gagal: ' + (res.error || 'Unknown error'), 'error');
   }
 }
 
