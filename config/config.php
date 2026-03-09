@@ -1,7 +1,7 @@
 <?php
 // PortoFolio config v2 - SECURE (no plaintext password)
 define('APP_NAME',    'PortoFolio');
-define('APP_VERSION', '1.0.0');
+define('APP_VERSION', '1.1.0');
 define('APP_BUILD',   '2025.03');
 define('APP_DESC',    'Personal Investment Tracker');
 define('WA_NUMBER',          '6289635637904');
