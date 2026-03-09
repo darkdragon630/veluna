@@ -1183,7 +1183,7 @@ async function saveInv() {
   try {
     const res = await api('investments.php', 'POST', payload);
     if (res.success) {
-      toast(id ? 'Investasi diperbarui ✅' : 'Investasi berhasil ditambahkan ✅', 'success');
+      toast(id ? 'Investasi diperbarui ✅' : 'Investasi berhasil ditambahkan', 'success');
       closeModal('add-modal');
       setTimeout(() => location.reload(), 600);
     } else { toast('Error: ' + (res.error||''), 'error'); }
@@ -1494,7 +1494,7 @@ async function saveCashTopup() {
   const date   = document.getElementById('cash-date').value;
   if (!amount || amount <= 0 || isNaN(amount)) { toast('Masukkan nominal yang valid', 'error'); return; }
   const res = await api('cash.php', 'POST', { type:'topup', amount, note, date });
-  if (res.success) { toast(`✅ Kas +${fmtIDR(amount)} ditambahkan`, 'success'); closeModal('cash-modal'); setTimeout(()=>location.reload(),500); }
+  if (res.success) { toast(` Kas +${fmtIDR(amount)} ditambahkan`, 'success'); closeModal('cash-modal'); setTimeout(()=>location.reload(),500); }
   else toast('Error: '+(res.error||''), 'error');
 }
 
