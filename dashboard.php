@@ -224,8 +224,14 @@ foreach (CATEGORIES as $cat => $cfg) {
               <button class="btn btn-outline btn-xs" onclick="openEditModal(<?= htmlspecialchars(json_encode($inv)) ?>)">✏</button>
               <?php if ($cfg['has_pnl']): ?>
               <button class="btn btn-green btn-xs" onclick="openSellModal(<?= htmlspecialchars(json_encode([
-                'id'=>$inv['id'],'cat'=>$cat,'name'=>$inv['name']??$inv['ticker']??'—',
-                'cost'=>$cost,'curVal'=>$curVal,'qty'=>$inv['qty']
+                'id'    => $inv['id'],
+                'cat'   => $cat,
+                'name'  => $inv['name'] ?? $inv['ticker'] ?? '—',
+                'cost'  => $cost,
+                'curVal'=> $curVal,
+                'qty'   => $inv['qty'],
+                'upnl'  => $upnl,
+                'rpnl'  => $rpnl,
               ])) ?>)">💸 Jual</button>
               <?php endif; ?>
 
@@ -923,15 +929,24 @@ $totalProg   = $totalTarget > 0 ? min($allStats['totalValue']/$totalTarget*100,1
     <input type="hidden" id="sell-inv-id">
     <input type="hidden" id="sell-inv-cat">
     <div id="sell-info-wrap" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:18px">
-      <table class="sell-info-table" style="width:100%">
-        <tr><td>Aset</td><td id="s-name">—</td></tr>
-        <tr><td>Modal</td><td id="s-cost">—</td></tr>
-        <tr><td>Estimasi Nilai</td><td id="s-val">—</td></tr>
-        <tr><td>Qty</td><td id="s-qty">—</td></tr>
+      <table class="sell-info-table" style="width:100%;font-size:12px">
+        <tr><td style="color:var(--text3)">Aset</td><td id="s-name" style="font-weight:600">—</td></tr>
+        <tr><td style="color:var(--text3)">Qty</td><td id="s-qty">—</td></tr>
+        <tr><td style="color:var(--text3)">Modal</td><td id="s-cost">—</td></tr>
+        <tr id="s-pnl-row" style="display:none">
+          <td style="color:var(--text3)">Total PnL</td>
+          <td id="s-pnl" style="font-weight:700">—</td>
+        </tr>
+        <tr style="border-top:1px solid var(--border)">
+          <td style="color:var(--gold);font-weight:600;padding-top:6px">Nilai Realisasi</td>
+          <td id="s-val" style="color:var(--gold);font-weight:700;font-size:14px;padding-top:6px">—</td>
+        </tr>
       </table>
     </div>
     <div class="form-group" style="margin-bottom:14px">
-      <label class="form-label">Harga Jual / Nilai Realisasi (Rp)</label>
+      <label class="form-label">Harga Jual / Nilai Realisasi (Rp)
+        <span style="font-size:10px;color:var(--text3);font-weight:400;margin-left:6px">modal + PnL — bisa diubah manual</span>
+      </label>
       <input type="number" class="form-control" id="sell-price" placeholder="0" step="any">
     </div>
     <div class="form-group" style="margin-bottom:18px">
@@ -1278,13 +1293,33 @@ function deleteInv(id, cat) {
 
 // ---- SELL ----
 function openSellModal(info) {
+  const cost  = parseFloat(info.cost)  || 0;
+  const upnl  = parseFloat(info.upnl)  || 0;
+  const rpnl  = parseFloat(info.rpnl)  || 0;
+  const totalPnl    = upnl + rpnl;
+  // Nilai realisasi = modal + total PnL (unrealized + realized)
+  // Jika PnL = 0, fallback ke curVal (harga pasar, mis. crypto live)
+  const realisasi   = totalPnl !== 0 ? (cost + totalPnl) : (parseFloat(info.curVal) || cost);
+
   document.getElementById('sell-inv-id').value  = info.id;
   document.getElementById('sell-inv-cat').value = info.cat;
   document.getElementById('s-name').textContent = info.name;
-  document.getElementById('s-cost').textContent = fmtIDR(info.cost);
-  document.getElementById('s-val').textContent  = fmtIDR(info.curVal);
   document.getElementById('s-qty').textContent  = info.qty ? fmtNum(parseFloat(info.qty)) : '—';
-  document.getElementById('sell-price').value   = parseFloat(info.curVal).toFixed(2);
+  document.getElementById('s-cost').textContent = fmtIDR(cost);
+
+  // Tampilkan baris PnL jika ada
+  const pnlRow = document.getElementById('s-pnl-row');
+  const pnlEl  = document.getElementById('s-pnl');
+  if (totalPnl !== 0) {
+    pnlRow.style.display = '';
+    pnlEl.textContent    = `${pnlSign(totalPnl)}${fmtIDR(totalPnl)}`;
+    pnlEl.style.color    = totalPnl > 0 ? 'var(--green)' : 'var(--red)';
+  } else {
+    pnlRow.style.display = 'none';
+  }
+
+  document.getElementById('s-val').textContent  = fmtIDR(realisasi);
+  document.getElementById('sell-price').value   = realisasi.toFixed(2);
   document.getElementById('sell-date').value    = new Date().toISOString().slice(0,10);
   openModal('sell-modal');
 }
@@ -1687,7 +1722,16 @@ window.addEventListener('load', () => {
     $cost = getInvCost($inv);
     $curVal = getInvCurrentValue($inv, $cryptoPrices);
   ?>
-  openSellModal(<?= json_encode(['id'=>$inv['id'],'cat'=>$preSellCat,'name'=>$inv['name']??$inv['ticker']??'—','cost'=>$cost,'curVal'=>$curVal,'qty'=>$inv['qty']]) ?>);
+  openSellModal(<?= json_encode([
+    'id'    => $inv['id'],
+    'cat'   => $preSellCat,
+    'name'  => $inv['name'] ?? $inv['ticker'] ?? '—',
+    'cost'  => $cost,
+    'curVal'=> $curVal,
+    'qty'   => $inv['qty'],
+    'upnl'  => (float)($inv['unrealized_pnl'] ?? 0),
+    'rpnl'  => (float)($inv['realized_pnl']   ?? 0),
+  ]) ?>);
   <?php endif; ?>
 });
 <?php endif; ?>
