@@ -161,7 +161,15 @@ foreach (CATEGORIES as $cat => $cfg) {
           }
           $displayPrice = $livePrice ?? ($inv['current_price'] ?? null);
         ?>
-        <tr>
+        <tr<?php if ($cat === 'crypto'): ?>
+          data-crypto-row="1"
+          data-coin-id="<?= htmlspecialchars($coinId ?? '') ?>"
+          data-qty="<?= (float)($inv['qty'] ?? 0) ?>"
+          data-cost="<?= $cost ?>"
+          data-upnl="<?= $upnl ?>"
+          data-rpnl="<?= $rpnl ?>"
+          data-inv-id="<?= $inv['id'] ?>"
+        <?php endif; ?>>
           <td style="color:var(--text3)"><?= $i+1 ?></td>
           <td>
             <div style="font-weight:500"><?= htmlspecialchars($inv['name'] ?: '—') ?></div>
@@ -181,17 +189,17 @@ foreach (CATEGORIES as $cat => $cfg) {
             <?php else: ?>—<?php endif; ?>
           </td>
           <td class="td-right td-mono"><?= $inv['buy_price'] ? fmtIDR((float)$inv['buy_price']) : '—' ?></td>
-          <td class="td-right td-mono">
+          <td class="td-right td-mono"<?php if($cat==='crypto'): ?> id="crypto-price-<?= $inv['id'] ?>"<?php endif; ?>>
             <?php if ($displayPrice): ?>
               <?= fmtIDR((float)$displayPrice) ?>
               <?php if ($cat==='crypto' && $livePrice): ?><br><span class="badge badge-cyan" style="font-size:9px">LIVE</span><?php endif; ?>
             <?php else: ?>—<?php endif; ?>
           </td>
           <td class="td-right td-mono"><?= fmtIDR($cost) ?></td>
-          <td class="td-right td-mono"><strong><?= fmtIDR($curVal) ?></strong></td>
+          <td class="td-right td-mono"<?php if($cat==='crypto'): ?> id="crypto-val-<?= $inv['id'] ?>"<?php endif; ?>><strong><?= fmtIDR($curVal) ?></strong></td>
           <?php if ($cfg['has_pnl']): ?>
-          <td class="td-right td-mono" style="color:var(--<?= pnlClass($pnl) ?>)"><?= pnlSign($pnl) . fmtIDR($pnl) ?></td>
-          <td class="td-right td-mono" style="color:var(--<?= pnlClass($pnl) ?>)"><?= pnlSign($pnlPct) . number_format($pnlPct,2) ?>%</td>
+          <td class="td-right td-mono" <?php if($cat==='crypto'): ?>id="crypto-pnl-<?= $inv['id'] ?>"<?php endif; ?> style="color:var(--<?= pnlClass($pnl) ?>)"><?= pnlSign($pnl) . fmtIDR($pnl) ?></td>
+          <td class="td-right td-mono" <?php if($cat==='crypto'): ?>id="crypto-pct-<?= $inv['id'] ?>"<?php endif; ?> style="color:var(--<?= pnlClass($pnl) ?>)"><?= pnlSign($pnlPct) . number_format($pnlPct,2) ?>%</td>
           <td class="td-right td-mono" style="font-size:11px">
             <?php if ($cat === 'property'): ?>
               <?php $mi = getPropertyMonthlyIncome($inv); $yi = getPropertyYield($inv); ?>
@@ -964,6 +972,49 @@ $totalProg   = $totalTarget > 0 ? min($allStats['totalValue']/$totalTarget*100,1
 const BASE_URL = '<?= BASE_URL ?>';
 const CATS = <?= json_encode(CATEGORIES) ?>;
 let cryptoPrices = <?= json_encode($cryptoPrices) ?>;
+
+// ── Auto-refresh harga crypto tiap 30 detik ──────────────────
+function updateCryptoDashboard(newPrices) {
+  cryptoPrices = newPrices;
+
+  document.querySelectorAll('tr[data-crypto-row]').forEach(row => {
+    const coinId = row.dataset.coinId;
+    const price  = newPrices[coinId];
+    if (!price) return;
+
+    const qty    = parseFloat(row.dataset.qty)  || 0;
+    const cost   = parseFloat(row.dataset.cost)  || 0;
+    const upnl   = parseFloat(row.dataset.upnl)  || 0;
+    const rpnl   = parseFloat(row.dataset.rpnl)  || 0;
+    const id     = row.dataset.invId;
+
+    const curVal    = price * qty;
+    const priceDiff = curVal - cost;
+    const pnl       = priceDiff + upnl + rpnl;
+    const pnlPct    = cost > 0 ? (pnl / cost * 100) : 0;
+
+    const pnlColor  = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--text)';
+    const sign      = v => v >= 0 ? '+' : '';
+
+    const priceEl = document.getElementById('crypto-price-' + id);
+    const valEl   = document.getElementById('crypto-val-'   + id);
+    const pnlEl   = document.getElementById('crypto-pnl-'   + id);
+    const pctEl   = document.getElementById('crypto-pct-'   + id);
+
+    if (priceEl) priceEl.innerHTML = fmtIDR(price) + '<br><span class="badge badge-cyan" style="font-size:9px">LIVE</span>';
+    if (valEl)   valEl.innerHTML   = '<strong>' + fmtIDR(curVal) + '</strong>';
+    if (pnlEl)   { pnlEl.textContent = sign(pnl) + fmtIDR(pnl); pnlEl.style.color = pnlColor; }
+    if (pctEl)   { pctEl.textContent = sign(pnlPct) + pnlPct.toFixed(2) + '%'; pctEl.style.color = pnlColor; }
+  });
+}
+
+setInterval(async () => {
+  try {
+    const r = await fetch(BASE_URL + 'api/crypto.php?action=prices');
+    const d = await r.json();
+    if (d.prices) updateCryptoDashboard(d.prices);
+  } catch(e) {}
+}, 8000);
 
 // ---- FILTER ----
 function filterCat(cat, btn) {
