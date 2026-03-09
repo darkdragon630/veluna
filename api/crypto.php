@@ -67,20 +67,30 @@ if ($action === 'refresh') {
 
 // Auto-refresh if cache is stale (for background cron or first load)
 if ($action === 'auto') {
-    $staleCheck = $db->query("SELECT COUNT(*) as cnt FROM crypto_cache WHERE updated_at < NOW() - INTERVAL ".CRYPTO_CACHE_TTL." SECOND")->fetch();
     $ids = getActiveCryptoIds($db);
-    if (!empty($ids) && ($staleCheck['cnt'] > 0 || $db->query("SELECT COUNT(*) FROM crypto_cache")->fetchColumn() == 0)) {
-        $data = fetchFromCoinGecko($ids);
-        $stmt = $db->prepare("INSERT INTO crypto_cache (coin_id, price_idr, price_usd) VALUES (?,?,?) ON DUPLICATE KEY UPDATE price_idr=?, price_usd=?, updated_at=NOW()");
-        foreach ($data as $coinId => $vals) {
-            $idr = (float)($vals['idr']??0);
-            $usd = (float)($vals['usd']??0);
-            $stmt->execute([$coinId,$idr,$usd,$idr,$usd]);
+    $fetched = false;
+    if (!empty($ids)) {
+        // Cek apakah ada cache yang stale (> TTL detik) atau cache kosong
+        $staleRow   = $db->query("SELECT COUNT(*) FROM crypto_cache WHERE updated_at < NOW() - INTERVAL ".CRYPTO_CACHE_TTL." SECOND")->fetchColumn();
+        $totalCache = $db->query("SELECT COUNT(*) FROM crypto_cache")->fetchColumn();
+        if ($staleRow > 0 || $totalCache == 0) {
+            $data = fetchFromCoinGecko($ids);
+            if (!empty($data)) {
+                $stmt = $db->prepare("INSERT INTO crypto_cache (coin_id, price_idr, price_usd) VALUES (?,?,?) ON DUPLICATE KEY UPDATE price_idr=?, price_usd=?, updated_at=NOW()");
+                foreach ($data as $coinId => $vals) {
+                    $idr = (float)($vals['idr'] ?? 0);
+                    $usd = (float)($vals['usd'] ?? 0);
+                    $stmt->execute([$coinId, $idr, $usd, $idr, $usd]);
+                }
+                $fetched = true;
+            }
+            // Jika CoinGecko gagal, tetap return cache lama (jangan error)
         }
     }
+    // Selalu return semua cached prices
     $prices = [];
     $rows = $db->query("SELECT coin_id, price_idr FROM crypto_cache")->fetchAll();
     foreach ($rows as $r) $prices[$r['coin_id']] = (float)$r['price_idr'];
-    echo json_encode(['success'=>true,'prices'=>$prices]);
+    echo json_encode(['success' => true, 'prices' => $prices, 'fetched' => $fetched]);
     exit;
 }
