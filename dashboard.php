@@ -188,15 +188,20 @@ foreach (CATEGORIES as $cat => $cfg) {
           <td class="td-right td-mono" style="color:var(--<?= pnlClass($pnl) ?>)"><?= pnlSign($pnl) . fmtIDR($pnl) ?></td>
           <td class="td-right td-mono" style="color:var(--<?= pnlClass($pnl) ?>)"><?= pnlSign($pnlPct) . number_format($pnlPct,2) ?>%</td>
           <?php
-            $upnl = (float)($inv['unrealized_pnl'] ?? 0);
+            $upnl  = (float)($inv['unrealized_pnl'] ?? 0);
+            $rpnl  = (float)($inv['realized_pnl']   ?? 0);
           ?>
-          <td class="td-right td-mono" style="color:var(--<?= pnlClass($upnl) ?>)">
+          <td class="td-right td-mono" style="font-size:11px">
             <?php if ($upnl != 0): ?>
-              <span><?= pnlSign($upnl) . fmtIDR(abs($upnl)) ?></span><br>
-              <span style="font-size:9px;color:var(--text3)">Blm Realisasi</span>
-            <?php else: ?>
-              <button class="btn btn-outline btn-xs" style="font-size:9px;padding:2px 6px"
-                onclick="openPnlModal(<?= $inv['id'] ?>, '<?= htmlspecialchars(addslashes($inv['name'] ?: ($inv['ticker'] ?: 'Investasi'))) ?>', 0)">+ Catat</button>
+              <div style="color:var(--<?= pnlClass($upnl) ?>)"><?= pnlSign($upnl) . fmtIDR(abs($upnl)) ?></div>
+              <div style="font-size:9px;color:var(--text3)">Unreal.</div>
+            <?php endif; ?>
+            <?php if ($rpnl != 0): ?>
+              <div style="color:var(--<?= pnlClass($rpnl) ?>)"><?= pnlSign($rpnl) . fmtIDR(abs($rpnl)) ?></div>
+              <div style="font-size:9px;color:var(--gold)">Realized</div>
+            <?php endif; ?>
+            <?php if ($upnl == 0 && $rpnl == 0): ?>
+              <span style="color:var(--text3)">—</span>
             <?php endif; ?>
           </td>
           <?php elseif ($cat === 'property'): ?>
@@ -215,12 +220,22 @@ foreach (CATEGORIES as $cat => $cfg) {
               ])) ?>)">💸 Jual</button>
               <?php endif; ?>
 
-              <?php if ($cfg['has_pnl']): ?>
-              <?php $upnl2 = (float)($inv['unrealized_pnl'] ?? 0); ?>
+              <?php if ($cfg['has_pnl'] && $cat !== 'crypto'): ?>
+              <?php
+                $upnl2 = (float)($inv['unrealized_pnl'] ?? 0);
+                $rpnl2 = (float)($inv['realized_pnl']   ?? 0);
+              ?>
               <button class="btn btn-outline btn-xs"
-                style="color:var(--<?= pnlClass($upnl2) ?>)"
-                title="Catat Unrealized PnL"
-                onclick="openPnlModal(<?= $inv['id'] ?>, '<?= htmlspecialchars(addslashes($inv['name'] ?: ($inv['ticker'] ?: 'Investasi'))) ?>', <?= $upnl2 ?>)">±</button>
+                style="color:var(--gold)"
+                title="Catat PnL"
+                onclick="openPnlModal(<?= $inv['id'] ?>, '<?= htmlspecialchars(addslashes($inv['name'] ?: ($inv['ticker'] ?: 'Investasi'))) ?>', <?= $upnl2 ?>, <?= $rpnl2 ?>, '<?= $cat ?>')">±</button>
+              <?php endif; ?>
+              <?php if ($cat === 'crypto'): ?>
+              <?php $rpnl2 = (float)($inv['realized_pnl'] ?? 0); ?>
+              <button class="btn btn-outline btn-xs"
+                style="color:var(--gold)"
+                title="Catat Staking/Reward"
+                onclick="openPnlModal(<?= $inv['id'] ?>, '<?= htmlspecialchars(addslashes($inv['name'] ?: ($inv['ticker'] ?: 'Investasi'))) ?>', 0, <?= $rpnl2 ?>, 'crypto')">💰</button>
               <?php endif; ?>
               <button class="btn btn-danger btn-xs" onclick="deleteInv(<?= $inv['id'] ?>, '<?= $cat ?>')">✕</button>
             </div>
@@ -602,6 +617,80 @@ $totalProg   = $totalTarget > 0 ? min($allStats['totalValue']/$totalTarget*100,1
 </div>
 
 <!-- ================== ADD / EDIT MODAL ================== -->
+<!-- ═══ MODAL PnL ═══════════════════════════════ -->
+<div class="modal-overlay" id="pnl-modal">
+  <div class="modal">
+    <div class="modal-title">📊 PnL — <span id="pnl-inv-name-title" style="color:var(--gold)"></span></div>
+    <input type="hidden" id="pnl-inv-id">
+    <input type="hidden" id="pnl-inv-cat">
+
+    <!-- Nilai saat ini -->
+    <div id="pnl-current-box" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;
+                padding:12px 16px;margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div id="pnl-unrealized-box">
+        <div style="font-size:10px;color:var(--text3);margin-bottom:3px">📈 Unrealized (Harga)</div>
+        <div style="font-size:17px;font-weight:700" id="pnl-current-unrealized">Rp 0</div>
+        <div style="font-size:10px;color:var(--text3)">Kenaikan nilai, belum dijual</div>
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--gold);margin-bottom:3px">💰 Realized (Terima)</div>
+        <div style="font-size:17px;font-weight:700" id="pnl-current-realized">Rp 0</div>
+        <div style="font-size:10px;color:var(--text3)" id="pnl-realized-label">Dividen / bunga / dll</div>
+      </div>
+    </div>
+
+    <!-- Pilih jenis PnL (disembunyikan jika hanya realized) -->
+    <div id="pnl-kind-wrap" style="margin-bottom:14px">
+      <label class="form-label">Jenis</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <button class="btn" id="pnl-kind-unrealized"
+          style="border:2px solid var(--border);color:var(--text3);padding:9px;font-size:11px;text-align:left"
+          onclick="setPnlKind('unrealized')">
+          📈 <strong>Unrealized</strong><br>
+          <span style="font-size:10px">Kenaikan/turun harga</span>
+        </button>
+        <button class="btn" id="pnl-kind-realized"
+          style="border:2px solid var(--border);color:var(--text3);padding:9px;font-size:11px;text-align:left"
+          onclick="setPnlKind('realized')">
+          💰 <strong>Realized</strong><br>
+          <span style="font-size:10px" id="pnl-kind-realized-hint">Dividen / bunga</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Untung / Rugi -->
+    <div style="margin-bottom:12px">
+      <label class="form-label">Perubahan</label>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+        <button class="btn" id="pnl-type-profit"
+          style="border:2px solid var(--green);color:var(--green);padding:9px;font-weight:600"
+          onclick="setPnlType('profit')">✅ Untung</button>
+        <button class="btn" id="pnl-type-loss"
+          style="border:2px solid var(--border);color:var(--text3);padding:9px"
+          onclick="setPnlType('loss')">❌ Rugi</button>
+      </div>
+    </div>
+
+    <div style="margin-bottom:8px">
+      <label class="form-label">Nominal (Rp)</label>
+      <input type="text" class="form-control" id="pnl-delta-amount"
+             placeholder="Contoh: 50.000" inputmode="decimal" oninput="updatePnlPreview()">
+    </div>
+
+    <!-- Preview -->
+    <div id="pnl-preview-box" style="background:var(--surface2);border:1px solid var(--border);
+         border-radius:8px;padding:10px 14px;margin-bottom:16px;font-size:12px;display:none">
+      <span style="color:var(--text3)">Setelah disimpan: </span>
+      <span style="font-weight:700" id="pnl-preview-val"></span>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-gold" style="flex:1" onclick="savePnlEntry()">💾 Simpan</button>
+      <button class="btn btn-outline" onclick="closeModal('pnl-modal')">Batal</button>
+    </div>
+  </div>
+</div>
+
 <div class="modal-overlay" id="add-modal">
   <div class="modal">
     <div class="modal-title" id="modal-title">➕ Tambah Investasi</div>
@@ -1387,43 +1476,92 @@ document.addEventListener('DOMContentLoaded', () => {
 
 
 // ──────────────────────────────────────────────────────────────
-// UNREALIZED PnL — satu nilai net per investasi
+// PnL — Unrealized & Realized per investasi
 // ──────────────────────────────────────────────────────────────
-let _pnlCurrentVal = 0;
-let _pnlType = 'profit'; // 'profit' | 'loss'
+const REALIZED_LABELS = {
+  savings:    'Bunga tabungan',
+  stocks:     'Dividen saham',
+  mutualFunds:'Dividen reksa dana',
+  crypto:     'Staking / reward',
+  property:   'Bagi hasil / sewa',
+  emergency:  '—',
+};
 
-function openPnlModal(invId, invName, currentVal) {
-  _pnlCurrentVal = parseFloat(currentVal) || 0;
+// Kategori yang defaultnya realized (penghasilan rutin)
+const REALIZED_DEFAULT_CATS = ['savings', 'property'];
+
+let _pnlCurrentUnrealized = 0;
+let _pnlCurrentRealized   = 0;
+let _pnlType = 'profit';   // 'profit' | 'loss'
+let _pnlKind = 'unrealized'; // 'unrealized' | 'realized'
+let _pnlCat  = '';
+
+// Kategori yang hanya punya realized (tidak perlu pilih jenis)
+const ONLY_REALIZED_CATS = ['savings', 'crypto'];
+
+function openPnlModal(invId, invName, currentUnrealized, currentRealized, cat) {
+  _pnlCurrentUnrealized = parseFloat(currentUnrealized) || 0;
+  _pnlCurrentRealized   = parseFloat(currentRealized)   || 0;
+  _pnlCat  = cat || '';
   _pnlType = 'profit';
 
-  document.getElementById('pnl-inv-id').value = invId;
+  document.getElementById('pnl-inv-id').value  = invId;
+  document.getElementById('pnl-inv-cat').value = cat || '';
   document.getElementById('pnl-inv-name-title').textContent = invName;
   document.getElementById('pnl-delta-amount').value = '';
   document.getElementById('pnl-preview-box').style.display = 'none';
 
-  // Tampilkan nilai saat ini
-  const dispEl = document.getElementById('pnl-current-display');
-  dispEl.textContent = (_pnlCurrentVal >= 0 ? '+' : '') + fmtIDR(_pnlCurrentVal);
-  dispEl.style.color = _pnlCurrentVal > 0 ? 'var(--green)' : _pnlCurrentVal < 0 ? 'var(--red)' : 'var(--text)';
+  // Nilai saat ini
+  const uEl = document.getElementById('pnl-current-unrealized');
+  uEl.textContent = (_pnlCurrentUnrealized >= 0 ? '+' : '') + fmtIDR(_pnlCurrentUnrealized);
+  uEl.style.color = _pnlCurrentUnrealized > 0 ? 'var(--green)' : _pnlCurrentUnrealized < 0 ? 'var(--red)' : 'var(--text)';
 
+  const rEl = document.getElementById('pnl-current-realized');
+  rEl.textContent = (_pnlCurrentRealized >= 0 ? '+' : '') + fmtIDR(_pnlCurrentRealized);
+  rEl.style.color = _pnlCurrentRealized > 0 ? 'var(--green)' : _pnlCurrentRealized < 0 ? 'var(--red)' : 'var(--text)';
+
+  // Label realized sesuai kategori
+  const rlabel = REALIZED_LABELS[cat] || 'Dividen / bunga / staking';
+  document.getElementById('pnl-realized-label').textContent     = rlabel;
+  document.getElementById('pnl-kind-realized-hint').textContent  = rlabel;
+
+  // Sembunyikan pilihan Unrealized untuk kategori only-realized
+  // (savings: hanya bunga, crypto: hanya staking — unrealized dari API)
+  const onlyRealized = ONLY_REALIZED_CATS.includes(cat);
+  document.getElementById('pnl-kind-wrap').style.display = onlyRealized ? 'none' : 'block';
+  document.getElementById('pnl-unrealized-box').style.display = onlyRealized ? 'none' : 'block';
+
+  // Default kind
+  const defaultKind = onlyRealized ? 'realized' : 'unrealized';
+  setPnlKind(defaultKind);
   setPnlType('profit');
   openModal('pnl-modal');
 }
 
+function setPnlKind(kind) {
+  _pnlKind = kind;
+  const btnU = document.getElementById('pnl-kind-unrealized');
+  const btnR = document.getElementById('pnl-kind-realized');
+  if (kind === 'unrealized') {
+    btnU.style.border = '2px solid var(--green)'; btnU.style.color = 'var(--green)';
+    btnR.style.border = '2px solid var(--border)'; btnR.style.color = 'var(--text3)';
+  } else {
+    btnR.style.border = '2px solid var(--gold)'; btnR.style.color = 'var(--gold)';
+    btnU.style.border = '2px solid var(--border)'; btnU.style.color = 'var(--text3)';
+  }
+  updatePnlPreview();
+}
+
 function setPnlType(type) {
   _pnlType = type;
-  const btnProfit = document.getElementById('pnl-type-profit');
-  const btnLoss   = document.getElementById('pnl-type-loss');
+  const btnP = document.getElementById('pnl-type-profit');
+  const btnL = document.getElementById('pnl-type-loss');
   if (type === 'profit') {
-    btnProfit.style.border  = '2px solid var(--green)';
-    btnProfit.style.color   = 'var(--green)';
-    btnLoss.style.border    = '2px solid var(--border)';
-    btnLoss.style.color     = 'var(--text3)';
+    btnP.style.border = '2px solid var(--green)'; btnP.style.color = 'var(--green)';
+    btnL.style.border = '2px solid var(--border)'; btnL.style.color = 'var(--text3)';
   } else {
-    btnLoss.style.border    = '2px solid var(--red)';
-    btnLoss.style.color     = 'var(--red)';
-    btnProfit.style.border  = '2px solid var(--border)';
-    btnProfit.style.color   = 'var(--text3)';
+    btnL.style.border = '2px solid var(--red)'; btnL.style.color = 'var(--red)';
+    btnP.style.border = '2px solid var(--border)'; btnP.style.color = 'var(--text3)';
   }
   updatePnlPreview();
 }
@@ -1435,11 +1573,13 @@ function updatePnlPreview() {
   const preVal = document.getElementById('pnl-preview-val');
   if (!amount || isNaN(amount) || amount <= 0) { preBox.style.display = 'none'; return; }
 
-  const delta  = _pnlType === 'profit' ? amount : -amount;
-  const result = _pnlCurrentVal + delta;
+  const delta   = _pnlType === 'profit' ? amount : -amount;
+  const current = _pnlKind === 'unrealized' ? _pnlCurrentUnrealized : _pnlCurrentRealized;
+  const result  = current + delta;
+  const label   = _pnlKind === 'unrealized' ? 'Unrealized' : 'Realized';
 
   preBox.style.display = 'block';
-  preVal.textContent   = (result >= 0 ? '+' : '') + fmtIDR(result);
+  preVal.textContent   = `${label}: ${result >= 0 ? '+' : ''}${fmtIDR(result)}`;
   preVal.style.color   = result > 0 ? 'var(--green)' : result < 0 ? 'var(--red)' : 'var(--text)';
 }
 
@@ -1453,11 +1593,12 @@ async function savePnlEntry() {
   }
 
   const delta = _pnlType === 'profit' ? amount : -amount;
-  const res   = await api('pnl.php', 'POST', { investment_id: invId, delta });
+  const res   = await api('pnl.php', 'POST', { investment_id: invId, kind: _pnlKind, delta });
 
   if (res.success) {
-    const newVal = res.unrealized_pnl;
-    toast(`PnL diperbarui: ${newVal >= 0 ? '+' : ''}${fmtIDR(newVal)}`, 'success');
+    const val   = _pnlKind === 'unrealized' ? res.unrealized_pnl : res.realized_pnl;
+    const label = _pnlKind === 'unrealized' ? 'Unrealized' : 'Realized';
+    toast(`${label} PnL: ${val >= 0 ? '+' : ''}${fmtIDR(val)} ✅`, 'success');
     closeModal('pnl-modal');
     setTimeout(() => location.reload(), 600);
   } else {
