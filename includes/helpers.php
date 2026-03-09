@@ -455,20 +455,52 @@ function adjustInvPnl(int $invId, string $kind, float $delta): array {
  * Total unrealized PnL — kenaikan harga posisi aktif (belum dijual).
  * Semua kategori kecuali emergency (tidak ada PnL).
  */
-function getTotalUnrealizedPnl(): array {
+function getTotalUnrealizedPnl(array $cryptoPrices = []): array {
     try {
-        $row = getDB()->query(
+        $db   = getDB();
+
+        // Non-crypto: baca langsung dari kolom unrealized_pnl di DB
+        $row = $db->query(
             "SELECT
                COALESCE(SUM(CASE WHEN unrealized_pnl > 0 THEN unrealized_pnl ELSE 0 END), 0) AS total_profit,
                COALESCE(SUM(CASE WHEN unrealized_pnl < 0 THEN unrealized_pnl ELSE 0 END), 0) AS total_loss,
                COALESCE(SUM(unrealized_pnl), 0) AS net
              FROM investments
-             WHERE is_sold = 0 AND category != 'emergency'"
+             WHERE is_sold = 0 AND category NOT IN ('emergency','crypto')"
         )->fetch();
+
+        $profit = (float)$row['total_profit'];
+        $loss   = abs((float)$row['total_loss']);
+        $net    = (float)$row['net'];
+
+        // Crypto: unrealized PnL = (harga_live × qty) − modal
+        // Tidak disimpan di DB — harus dihitung dari live prices
+        if (!empty($cryptoPrices)) {
+            $cryptoInvs = $db->query(
+                "SELECT coin_id, ticker, qty, amount, buy_price FROM investments
+                  WHERE is_sold = 0 AND category = 'crypto'"
+            )->fetchAll();
+            foreach ($cryptoInvs as $c) {
+                $coinId    = $c['coin_id'] ?: getCoinId($c['ticker'] ?? '');
+                $price     = $cryptoPrices[$coinId] ?? 0;
+                $qty       = (float)$c['qty'];
+                // Modal crypto: buy_price × qty, fallback ke amount
+                $cost      = ($c['buy_price'] && $qty)
+                             ? (float)$c['buy_price'] * $qty
+                             : (float)$c['amount'];
+                if ($price > 0 && $qty > 0) {
+                    $curVal  = $price * $qty;
+                    $cryptoPnl = $curVal - $cost;
+                    if ($cryptoPnl > 0) { $profit += $cryptoPnl; $net += $cryptoPnl; }
+                    else                { $loss   += abs($cryptoPnl); $net += $cryptoPnl; }
+                }
+            }
+        }
+
         return [
-            'profit' => (float)$row['total_profit'],
-            'loss'   => abs((float)$row['total_loss']),
-            'net'    => (float)$row['net'],
+            'profit' => $profit,
+            'loss'   => $loss,
+            'net'    => $net,
         ];
     } catch (Throwable) { return ['profit'=>0,'loss'=>0,'net'=>0]; }
 }
