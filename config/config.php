@@ -16,42 +16,66 @@ define('CRYPTO_CACHE_TTL', 60);
 
 define('SESSION_LIFETIME', 86400); // 24 jam
 
+// ── DB Session Handler ─────────────────────────────────────────
+// Simpan session di MySQL bukan di /tmp — aman untuk hosting ephemeral (Wasmer)
+// Tabel: php_sessions (session_id, data, last_access)
+class DbSessionHandler implements SessionHandlerInterface {
+    private PDO $db;
+    public function __construct(PDO $db) { $this->db = $db; }
+    public function open($path, $name): bool { return true; }
+    public function close(): bool { return true; }
+    public function read($id): string|false {
+        try {
+            $s = $this->db->prepare(
+                "SELECT data FROM php_sessions WHERE session_id=? AND last_access > ?"
+            );
+            $s->execute([$id, time() - SESSION_LIFETIME]);
+            $row = $s->fetch(PDO::FETCH_NUM);
+            return $row ? $row[0] : '';
+        } catch (Throwable) { return ''; }
+    }
+    public function write($id, $data): bool {
+        try {
+            $this->db->prepare(
+                "REPLACE INTO php_sessions (session_id, data, last_access) VALUES (?,?,?)"
+            )->execute([$id, $data, time()]);
+            return true;
+        } catch (Throwable) { return false; }
+    }
+    public function destroy($id): bool {
+        try {
+            $this->db->prepare("DELETE FROM php_sessions WHERE session_id=?")->execute([$id]);
+            return true;
+        } catch (Throwable) { return false; }
+    }
+    public function gc($maxlifetime): int|false {
+        try {
+            $s = $this->db->prepare("DELETE FROM php_sessions WHERE last_access < ?");
+            $s->execute([time() - $maxlifetime]);
+            return $s->rowCount();
+        } catch (Throwable) { return 0; }
+    }
+}
+// Register handler menggunakan koneksi DB yang sudah ada
+session_set_save_handler(new DbSessionHandler(getDB()), true);
+
 ini_set('session.use_strict_mode',  '1');
 ini_set('session.use_only_cookies', '1');
 ini_set('session.cookie_httponly',  '1');
 ini_set('session.cookie_samesite',  'Strict');
 ini_set('session.gc_maxlifetime',   (string)SESSION_LIFETIME);
-ini_set('session.cookie_lifetime',  (string)SESSION_LIFETIME); // cookie tetap hidup 24 jam walau browser ditutup
 session_name(SESSION_NAME);
 if (session_status() === PHP_SESSION_NONE) {
     session_set_cookie_params([
-        'lifetime' => SESSION_LIFETIME,
+        'lifetime' => SESSION_LIFETIME,   // cookie hidup 24 jam walau browser ditutup
         'httponly' => true,
         'samesite' => 'Strict',
         'secure'   => (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off'),
     ]);
     session_start();
 }
-
-// Session ID regeneration — HANYA untuk page biasa, bukan API request.
-// Jika dilakukan saat API call (fetch/XHR), cookie lama terhapus → logout.
-$_isApiReq = defined('API_REQUEST') && API_REQUEST === true;
-if (!$_isApiReq) {
-    if (isset($_SESSION['_last_regen'])) {
-        if (time() - $_SESSION['_last_regen'] > SESSION_REGEN_INTERVAL) {
-            session_regenerate_id(true);
-            $_SESSION['_last_regen'] = time();
-        }
-    } else { $_SESSION['_last_regen'] = time(); }
-}
-
-// UA hash — hanya set saat login, jangan destroy saat beda (fetch bisa beda UA minor)
-$__ua = md5(substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 80));
-if (!isset($_SESSION['_ua_hash'])) {
-    $_SESSION['_ua_hash'] = $__ua;
-}
-// Catatan: pengecekan UA dihapus karena fetch() dari browser bisa kirim UA berbeda
-// yang menyebabkan logout tak terduga. Security tetap dijaga via session token.
+// Tidak ada session_regenerate_id di sini — hanya dilakukan saat login
+// Tidak ada UA check — fetch() bisa kirim UA berbeda
 
 function isLoggedIn(): bool {
     if (!isset($_SESSION['pf_auth'], $_SESSION['pf_user_id'])) return false;
