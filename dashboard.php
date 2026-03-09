@@ -125,9 +125,7 @@ foreach (CATEGORIES as $cat => $cfg) {
           <th class="td-right">Nilai Saat Ini</th>
           <?php if ($cfg['has_pnl']): ?>
             <th class="td-right">PnL</th><th class="td-right">PnL%</th>
-            <th class="td-right">Unrealized</th>
-          <?php elseif ($cat === 'property'): ?>
-            <th class="td-right">Pendapatan/Bln</th><th class="td-right">Yield/Thn</th>
+            <th class="td-right"><?= $cat === 'property' ? 'Yield / Bulan' : 'Unrealized' ?></th>
           <?php else: ?><th colspan="2">—</th><?php endif; ?>
           <th class="td-center">Tanggal</th>
           <th class="td-center">Aksi</th>
@@ -195,16 +193,24 @@ foreach (CATEGORIES as $cat => $cfg) {
           <td class="td-right td-mono" style="color:var(--<?= pnlClass($pnl) ?>)"><?= pnlSign($pnl) . fmtIDR($pnl) ?></td>
           <td class="td-right td-mono" style="color:var(--<?= pnlClass($pnl) ?>)"><?= pnlSign($pnlPct) . number_format($pnlPct,2) ?>%</td>
           <td class="td-right td-mono" style="font-size:11px">
-            <?php if ($upnl != 0): ?>
-              <div style="color:var(--<?= pnlClass($upnl) ?>)"><?= pnlSign($upnl) . fmtIDR(abs($upnl)) ?></div>
-              <div style="font-size:9px;color:var(--text3)">Unreal.</div>
-            <?php endif; ?>
-            <?php if ($rpnl != 0): ?>
-              <div style="color:var(--<?= pnlClass($rpnl) ?>)"><?= pnlSign($rpnl) . fmtIDR(abs($rpnl)) ?></div>
-              <div style="font-size:9px;color:var(--gold)">Realized</div>
-            <?php endif; ?>
-            <?php if ($upnl == 0 && $rpnl == 0): ?>
-              <span style="color:var(--text3)">—</span>
+            <?php if ($cat === 'property'): ?>
+              <?php $mi = getPropertyMonthlyIncome($inv); $yi = getPropertyYield($inv); ?>
+              <?php if ($mi > 0): ?>
+                <div style="color:var(--green);font-weight:600"><?= fmtIDR($mi) ?>/bln</div>
+                <div style="color:var(--gold);font-size:10px"><?= number_format($yi,2) ?>%/thn</div>
+              <?php else: ?><span style="color:var(--text3)">—</span><?php endif; ?>
+            <?php else: ?>
+              <?php if ($upnl != 0): ?>
+                <div style="color:var(--<?= pnlClass($upnl) ?>)"><?= pnlSign($upnl) . fmtIDR(abs($upnl)) ?></div>
+                <div style="font-size:9px;color:var(--text3)">Unreal.</div>
+              <?php endif; ?>
+              <?php if ($rpnl != 0): ?>
+                <div style="color:var(--<?= pnlClass($rpnl) ?>)"><?= pnlSign($rpnl) . fmtIDR(abs($rpnl)) ?></div>
+                <div style="font-size:9px;color:var(--gold)">Realized</div>
+              <?php endif; ?>
+              <?php if ($upnl == 0 && $rpnl == 0): ?>
+                <span style="color:var(--text3)">—</span>
+              <?php endif; ?>
             <?php endif; ?>
           </td>
           <?php elseif ($cat === 'property'): ?>
