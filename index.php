@@ -848,35 +848,6 @@ function updateCryptoDisplay() {
     if (statTgtSub) statTgtSub.textContent = 'dari ' + (ttgt > 0 ? fmtIDR(ttgt) : 'Rp 0');
   }
 
-  // ── Update mini card Crypto di Target Investasi ──
-  const miniVal  = document.getElementById('tgt-mini-val-crypto');
-  const miniPnl  = document.getElementById('tgt-mini-pnl-crypto');
-  const miniBar  = document.getElementById('tgt-mini-bar-crypto');
-  if (miniVal)  miniVal.textContent = fmtIDR(cryptoCatValue);
-  if (miniPnl) {
-    miniPnl.textContent = 'PnL ' + sign(cryptoCatPnl) + fmtIDR(cryptoCatPnl);
-    miniPnl.style.color = catColor(cryptoCatPnl);
-  }
-  if (miniBar) {
-    const miniTgt = parseFloat(miniBar.dataset.tgt) || 0;
-    const miniPct = miniTgt > 0 ? Math.min(cryptoCatValue / miniTgt * 100, 100) : 0;
-    miniBar.style.width = miniPct.toFixed(2) + '%';
-    // Update % text di sebelah nama kategori
-    const miniPctEl = miniBar.closest('div')?.previousElementSibling
-                       ?.querySelector('[id^=""]')?.parentElement
-                       ?.querySelector('[style*="font-size:14px"]');
-  }
-  // Update % angka di header mini card crypto — cari via closest card
-  if (miniBar) {
-    const card = miniBar.closest('[style*="background:var(--surface)"]');
-  }
-  const miniPctEl = document.getElementById('tgt-mini-pct-crypto');
-  if (miniPctEl && miniBar) {
-    const mTgt2 = parseFloat(miniBar.dataset.tgt) || 0;
-    const mPct2 = mTgt2 > 0 ? Math.min(cryptoCatValue / mTgt2 * 100, 100) : 0;
-    miniPctEl.textContent = mPct2.toFixed(1) + '%';
-  }
-
   // ── Fix tgt-pnl visibility — unhide jika ada PnL ──
   if (tgtPnl) {
     if (tgtBar && tgtBar.dataset.basePnl !== undefined) {
