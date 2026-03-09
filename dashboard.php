@@ -9,7 +9,7 @@ $isLoggedIn = true; // confirmed by requireLogin()
 $cryptoPrices = getCryptoPrices();
 $allStats     = getAllStats($cryptoPrices);
 $cashStats    = getCashStats();
-$unrealizedStats = getTotalUnrealizedPnl();
+$unrealizedStats = getTotalUnrealizedPnl($cryptoPrices);
 $cashLedger   = getCashLedger(40);
 $maintenance  = getMaintenance();
 
