@@ -195,13 +195,10 @@ function getInvCurrentValue(array $inv, array $cryptoPrices): float {
         return $amount;
     }
 
-    // Properti tokenisasi: nilai = modal + unrealized_pnl (kenaikan harga token)
-    // current_value dipakai untuk menyimpan pendapatan per bulan (tidak mempengaruhi nilai)
-    if ($cat === 'property') {
-        $base  = (float)($inv['buy_price'] ?? $amount);
-        $upnl  = (float)($inv['unrealized_pnl'] ?? 0);
-        return $base + $upnl;
-    }
+    // Properti tokenisasi: nilai = modal (buy_price)
+    // unrealized_pnl (kenaikan harga token) + realized_pnl (bagi hasil) dihitung terpisah di PnL column
+    // current_value dipakai untuk menyimpan pendapatan per bulan
+    if ($cat === 'property') return (float)($inv['buy_price'] ?? $amount);
 
     return $amount;
 }
@@ -248,20 +245,23 @@ function getPropertyYield(array $inv): float {
 /** Stats per kategori — PnL = sum(currentValue) - sum(cost) */
 function getCatStats(string $cat, array $cryptoPrices): array {
     $invs = getInvestments($cat);
-    $totalCost = 0; $totalValue = 0; $totalRealized = 0;
+    $totalCost       = 0; $totalValue = 0;
+    $totalUnrealized = 0; $totalRealized  = 0;
     foreach ($invs as $inv) {
-        $totalCost     += getInvCost($inv);
-        $totalValue    += getInvCurrentValue($inv, $cryptoPrices);
-        // Realized PnL (dividen/bunga/staking/bagi hasil) — sudah diterima, masuk total return
-        $totalRealized += (float)($inv['realized_pnl'] ?? 0);
+        $totalCost       += getInvCost($inv);
+        $totalValue      += getInvCurrentValue($inv, $cryptoPrices);
+        $totalUnrealized += (float)($inv['unrealized_pnl'] ?? 0);
+        $totalRealized   += (float)($inv['realized_pnl']   ?? 0);
     }
-    // Total PnL = kenaikan harga (value - cost) + yang sudah diterima (realized)
+    // Sama dengan formula di dashboard per-row:
+    // PnL = (price diff) + unrealized manual + realized (dividen/bunga/staking/bagi hasil)
     $pricePnl = $totalValue - $totalCost;
-    $pnl      = $pricePnl + $totalRealized;
+    $pnl      = $pricePnl + $totalUnrealized + $totalRealized;
     $pnlPct   = $totalCost > 0 ? ($pnl / $totalCost * 100) : 0;
     return compact('totalCost','totalValue','pnl','pnlPct') + [
         'count'          => count($invs),
         'pricePnl'       => $pricePnl,
+        'totalUnrealized'=> $totalUnrealized,
         'totalRealized'  => $totalRealized,
     ];
 }
