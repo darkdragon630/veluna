@@ -334,17 +334,28 @@ foreach (CATEGORIES as $cat => $cfg):
       </div>
     </div>
     <div style="text-align:right">
-      <div style="font-size:14px;font-weight:500;color:<?= $cfg['color'] ?>"><?= number_format($pct,1) ?>%</div>
+      <div style="font-size:14px;font-weight:500;color:<?= $cfg['color'] ?>"
+           <?php if($cat==='crypto'): ?>id="tgt-mini-pct-crypto"<?php endif; ?>
+      ><?= number_format($pct,1) ?>%</div>
       <?php if($cfg['has_pnl'] && $s['count']>0): ?>
-      <div style="font-size:10px;color:var(--<?= pnlClass($s['pnl']) ?>)">PnL <?= pnlSign($s['pnl']).fmtIDR($s['pnl']) ?></div>
+      <div style="font-size:10px;color:var(--<?= pnlClass($s['pnl']) ?>)"
+           <?php if($cat==='crypto'): ?>id="tgt-mini-pnl-crypto" data-base-non-crypto-pnl="0"<?php endif; ?>>
+        PnL <?= pnlSign($s['pnl']).fmtIDR($s['pnl']) ?>
+      </div>
       <?php endif; ?>
     </div>
   </div>
   <div class="progress-bg" style="height:5px;margin-bottom:7px">
-    <div class="progress-fill" style="width:<?= $pct ?>%;background:<?= $cfg['color'] ?>"></div>
+    <div class="progress-fill"
+         <?php if($cat==='crypto'): ?>
+           id="tgt-mini-bar-crypto"
+           data-tgt="<?= $tgt ?>"
+           data-base-non-crypto="0"
+         <?php endif; ?>
+         style="width:<?= $pct ?>%;background:<?= $cfg['color'] ?>"></div>
   </div>
   <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3)">
-    <span><?= fmtIDR($s['totalValue']) ?></span>
+    <span <?php if($cat==='crypto'): ?>id="tgt-mini-val-crypto"<?php endif; ?>><?= fmtIDR($s['totalValue']) ?></span>
     <span><?= $tgt>0 ? fmtIDR($tgt) : 'Belum diset' ?></span>
   </div>
 </div>
@@ -837,17 +848,66 @@ function updateCryptoDisplay() {
     if (statTgtSub) statTgtSub.textContent = 'dari ' + (ttgt > 0 ? fmtIDR(ttgt) : 'Rp 0');
   }
 
+  // ── Update mini card Crypto di Target Investasi ──
+  const miniVal  = document.getElementById('tgt-mini-val-crypto');
+  const miniPnl  = document.getElementById('tgt-mini-pnl-crypto');
+  const miniBar  = document.getElementById('tgt-mini-bar-crypto');
+  if (miniVal)  miniVal.textContent = fmtIDR(cryptoCatValue);
+  if (miniPnl) {
+    miniPnl.textContent = 'PnL ' + sign(cryptoCatPnl) + fmtIDR(cryptoCatPnl);
+    miniPnl.style.color = catColor(cryptoCatPnl);
+  }
+  if (miniBar) {
+    const miniTgt = parseFloat(miniBar.dataset.tgt) || 0;
+    const miniPct = miniTgt > 0 ? Math.min(cryptoCatValue / miniTgt * 100, 100) : 0;
+    miniBar.style.width = miniPct.toFixed(2) + '%';
+    // Update % text di sebelah nama kategori
+    const miniPctEl = miniBar.closest('div')?.previousElementSibling
+                       ?.querySelector('[id^=""]')?.parentElement
+                       ?.querySelector('[style*="font-size:14px"]');
+  }
+  // Update % angka di header mini card crypto — cari via closest card
+  if (miniBar) {
+    const card = miniBar.closest('[style*="background:var(--surface)"]');
+  }
+  const miniPctEl = document.getElementById('tgt-mini-pct-crypto');
+  if (miniPctEl && miniBar) {
+    const mTgt2 = parseFloat(miniBar.dataset.tgt) || 0;
+    const mPct2 = mTgt2 > 0 ? Math.min(cryptoCatValue / mTgt2 * 100, 100) : 0;
+    miniPctEl.textContent = mPct2.toFixed(1) + '%';
+  }
+
   // ── Fix tgt-pnl visibility — unhide jika ada PnL ──
   if (tgtPnl) {
-    const curPnlText = tgtPnl.textContent || '';
-    // Ambil nilai terbaru dari tgt-bar calculation
     if (tgtBar && tgtBar.dataset.basePnl !== undefined) {
       const bPnl  = parseFloat(tgtBar.dataset.basePnl)       || 0;
       const bCPnl = parseFloat(tgtBar.dataset.baseCryptoPnl) || 0;
       const latestTotalPnl = bPnl - bCPnl + cryptoCatPnl;
-      tgtPnl.textContent  = 'PnL: ' + sign(latestTotalPnl) + fmtIDR(latestTotalPnl);
-      tgtPnl.style.color  = catColor(latestTotalPnl);
+      tgtPnl.textContent   = 'PnL: ' + sign(latestTotalPnl) + fmtIDR(latestTotalPnl);
+      tgtPnl.style.color   = catColor(latestTotalPnl);
       tgtPnl.style.display = latestTotalPnl !== 0 ? 'block' : 'none';
+    }
+  }
+
+  // ── Update mini card crypto di Target Investasi ──
+  const miniVal  = document.getElementById('tgt-mini-val-crypto');
+  const miniPnl  = document.getElementById('tgt-mini-pnl-crypto');
+  const miniPct  = document.getElementById('tgt-mini-pct-crypto');
+  const miniBar  = document.getElementById('tgt-mini-bar-crypto');
+
+  if (miniVal) miniVal.textContent = fmtIDR(cryptoCatValue);
+
+  if (miniPnl) {
+    miniPnl.textContent = 'PnL ' + sign(cryptoCatPnl) + fmtIDR(cryptoCatPnl);
+    miniPnl.style.color = catColor(cryptoCatPnl);
+  }
+
+  if (miniBar) {
+    const miniTgt = parseFloat(miniBar.dataset.tgt) || 0;
+    const miniNewPct = miniTgt > 0 ? Math.min(cryptoCatValue / miniTgt * 100, 100) : 0;
+    miniBar.style.width = miniNewPct.toFixed(2) + '%';
+    if (miniPct) {
+      miniPct.textContent = miniNewPct.toFixed(1) + '%';
     }
   }
 }
