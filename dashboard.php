@@ -145,10 +145,17 @@ foreach (CATEGORIES as $cat => $cfg) {
         </td></tr>
         <?php else: ?>
         <?php foreach ($invs as $i => $inv):
-          $cost   = getInvCost($inv);
-          $curVal = getInvCurrentValue($inv, $cryptoPrices);
-          $pnl    = $curVal - $cost;
-          $pnlPct = $cost > 0 ? ($pnl/$cost*100) : 0;
+          $cost    = getInvCost($inv);
+          $curVal  = getInvCurrentValue($inv, $cryptoPrices);
+          $upnl    = (float)($inv['unrealized_pnl'] ?? 0);
+          $rpnl    = (float)($inv['realized_pnl']   ?? 0);
+          // PnL = (harga sekarang - modal) + unrealized manual + realized (dividen/bunga/staking/bagi hasil)
+          // Untuk property: curVal = buyPrice (modal), jadi price diff = 0, PnL = upnl + rpnl
+          // Untuk crypto: curVal = live price * qty (sudah include price diff), upnl = 0
+          // Untuk saham/RD: curVal = price*qty atau fallback ke modal, upnl/rpnl = manual input
+          $priceDiff = $curVal - $cost;
+          $pnl       = $priceDiff + $upnl + $rpnl;
+          $pnlPct    = $cost > 0 ? ($pnl / $cost * 100) : 0;
           $livePrice = null;
           if ($cat === 'crypto' && !empty($inv['ticker'])) {
             $coinId = $inv['coin_id'] ?? getCoinId($inv['ticker']);
@@ -187,10 +194,6 @@ foreach (CATEGORIES as $cat => $cfg) {
           <?php if ($cfg['has_pnl']): ?>
           <td class="td-right td-mono" style="color:var(--<?= pnlClass($pnl) ?>)"><?= pnlSign($pnl) . fmtIDR($pnl) ?></td>
           <td class="td-right td-mono" style="color:var(--<?= pnlClass($pnl) ?>)"><?= pnlSign($pnlPct) . number_format($pnlPct,2) ?>%</td>
-          <?php
-            $upnl  = (float)($inv['unrealized_pnl'] ?? 0);
-            $rpnl  = (float)($inv['realized_pnl']   ?? 0);
-          ?>
           <td class="td-right td-mono" style="font-size:11px">
             <?php if ($upnl != 0): ?>
               <div style="color:var(--<?= pnlClass($upnl) ?>)"><?= pnlSign($upnl) . fmtIDR(abs($upnl)) ?></div>
