@@ -97,8 +97,11 @@ $bestCat = array_key_first($performers) ?? null;
   </div>
   <div class="stat-card">
     <div class="stat-label">Target Total</div>
-    <div class="stat-value gold"><?= number_format($totalProgress, 1) ?>%</div>
-    <div class="stat-sub">dari <?= fmtIDR($totalTarget ?: 0) ?></div>
+    <div class="stat-value gold" id="stat-target-pct"
+         data-total-target="<?= $totalTarget ?>"
+         data-base-non-crypto="<?= $allStats['totalValue'] - ($catData['crypto']['stats']['totalValue'] ?? 0) ?>"
+    ><?= number_format($totalProgress, 1) ?>%</div>
+    <div class="stat-sub" id="stat-target-sub">dari <?= fmtIDR($totalTarget ?: 0) ?></div>
   </div>
   <div class="stat-card" style="border-color:rgba(34,197,94,0.3)">
     <div class="stat-label">💵 Saldo Kas</div>
@@ -114,10 +117,13 @@ $bestCat = array_key_first($performers) ?? null;
   </div>
 
   <!-- Baris 2: PnL -->
-  <div class="stat-card" style="border-color:rgba(<?= $upnl['net']>=0?'34,197,94':'239,68,68' ?>,0.3)">
+  <div class="stat-card" id="stat-upnl-card" style="border-color:rgba(<?= $upnl['net']>=0?'34,197,94':'239,68,68' ?>,0.3)"
+       data-base-non-crypto-pnl="<?= ($upnl['net']) - ($catData['crypto']['stats']['pnl'] ?? 0) ?>"
+       data-base-crypto-pnl="<?= $catData['crypto']['stats']['pnl'] ?? 0 ?>"
+       data-base-cost="<?= $allStats['totalCost'] ?>">
     <div class="stat-label">📈 Unrealized PnL</div>
-    <div class="stat-value <?= pnlClass($upnl['net']) ?>"><?= pnlSign($upnl['net']) . fmtIDR($upnl['net']) ?></div>
-    <div class="stat-sub">
+    <div class="stat-value" id="stat-upnl-val" style="color:var(--<?= pnlClass($upnl['net']) ?>)"><?= pnlSign($upnl['net']) . fmtIDR($upnl['net']) ?></div>
+    <div class="stat-sub" id="stat-upnl-sub">
       <span style="color:var(--green)">+<?= fmtIDR($upnl['profit']) ?></span>
       / <span style="color:var(--red)">-<?= fmtIDR($upnl['loss']) ?></span>
       &bull; Posisi aktif
@@ -138,10 +144,13 @@ $bestCat = array_key_first($performers) ?? null;
       <?php endif; ?>
     </div>
   </div>
-  <div class="stat-card" style="border-color:rgba(<?= $totalPnl>=0?'34,197,94':'239,68,68' ?>,0.3)">
+  <div class="stat-card" id="stat-totalpnl-card" style="border-color:rgba(<?= $totalPnl>=0?'34,197,94':'239,68,68' ?>,0.3)"
+       data-base-realized="<?= $soldStats['total_realized_pnl'] ?>"
+       data-base-non-crypto-pnl="<?= ($upnl['net']) - ($catData['crypto']['stats']['pnl'] ?? 0) ?>"
+       data-base-crypto-pnl="<?= $catData['crypto']['stats']['pnl'] ?? 0 ?>">
     <div class="stat-label">📊 Total PnL</div>
-    <div class="stat-value <?= pnlClass($totalPnl) ?>"><?= pnlSign($totalPnl) . fmtIDR($totalPnl) ?></div>
-    <div class="stat-sub">
+    <div class="stat-value" id="stat-totalpnl-val" style="color:var(--<?= pnlClass($totalPnl) ?>)"><?= pnlSign($totalPnl) . fmtIDR($totalPnl) ?></div>
+    <div class="stat-sub" id="stat-totalpnl-sub">
       Unrealized <?= pnlSign($upnl['net']) . fmtIDR($upnl['net']) ?>
       + Realized <?= pnlSign($soldStats['total_realized_pnl']) . fmtIDR($soldStats['total_realized_pnl']) ?>
     </div>
@@ -279,8 +288,7 @@ foreach (CATEGORIES as $cat => $cfg):
     </div>
     <div style="text-align:right">
       <div id="tgt-pct" style="font-size:24px;font-weight:600;color:var(--gold)"><?= number_format($totalProgress,1) ?>%</div>
-      <div id="tgt-pnl" style="font-size:11px;color:var(--<?= pnlClass($allStats['pnl']) ?>)"
-           <?php if($allStats['pnl'] == 0): ?>style="display:none"<?php endif; ?>>
+      <div id="tgt-pnl" style="font-size:11px;color:var(--<?= pnlClass($allStats['pnl']) ?>);<?= $allStats['pnl']==0 ? 'display:none' : '' ?>">
         PnL: <?= pnlSign($allStats['pnl']) . fmtIDR($allStats['pnl']) ?>
       </div>
     </div>
@@ -708,8 +716,7 @@ function updateCryptoDisplay() {
     cryptoCatPnl   += pnl;
   });
 
-  if (cryptoCatCost === 0) return;
-  const cryptoPnlPct = cryptoCatPnl / cryptoCatCost * 100;
+  const cryptoPnlPct = cryptoCatCost > 0 ? (cryptoCatPnl / cryptoCatCost * 100) : 0;
   const catColor     = v => v > 0 ? 'var(--green)' : v < 0 ? 'var(--red)' : 'var(--text)';
   const sign         = v => v >= 0 ? '+' : '';
 
@@ -780,6 +787,68 @@ function updateCryptoDisplay() {
   if (statPortoEl) {
     const baseNonCrypto2 = parseFloat(statPortoEl.dataset.baseNonCrypto) || 0;
     statPortoEl.textContent = fmtIDR(baseNonCrypto2 + cryptoCatValue);
+  }
+
+  // ── Update stat card Unrealized PnL ──
+  const upnlCard = document.getElementById('stat-upnl-card');
+  const upnlVal  = document.getElementById('stat-upnl-val');
+  const upnlSub  = document.getElementById('stat-upnl-sub');
+  if (upnlCard && upnlVal) {
+    const baseNonCryptoPnl = parseFloat(upnlCard.dataset.baseNonCryptoPnl) || 0;
+    // cryptoCatPnl = unrealized PnL dari crypto (price diff + upnl + rpnl per row)
+    const newUnreal  = baseNonCryptoPnl + cryptoCatPnl;
+    const uColor     = catColor(newUnreal);
+    upnlVal.textContent = sign(newUnreal) + fmtIDR(newUnreal);
+    upnlVal.style.color = uColor;
+    upnlCard.style.borderColor = newUnreal >= 0
+      ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)';
+  }
+
+  // ── Update stat card Total PnL ──
+  const tpnlCard = document.getElementById('stat-totalpnl-card');
+  const tpnlVal  = document.getElementById('stat-totalpnl-val');
+  const tpnlSub  = document.getElementById('stat-totalpnl-sub');
+  if (tpnlCard && tpnlVal) {
+    const baseRealized     = parseFloat(tpnlCard.dataset.baseRealized)     || 0;
+    const baseNonCryptoPnl2= parseFloat(tpnlCard.dataset.baseNonCryptoPnl) || 0;
+    const newUnreal2 = baseNonCryptoPnl2 + cryptoCatPnl;
+    const newTotal   = newUnreal2 + baseRealized;
+    const tColor     = catColor(newTotal);
+    tpnlVal.textContent = sign(newTotal) + fmtIDR(newTotal);
+    tpnlVal.style.color = tColor;
+    tpnlCard.style.borderColor = newTotal >= 0
+      ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)';
+    if (tpnlSub) {
+      tpnlSub.innerHTML =
+        'Unrealized ' + sign(newUnreal2) + fmtIDR(newUnreal2) +
+        ' + Realized ' + sign(baseRealized) + fmtIDR(baseRealized);
+    }
+  }
+
+  // ── Update stat card Target Total % ──
+  const statTgtPct = document.getElementById('stat-target-pct');
+  const statTgtSub = document.getElementById('stat-target-sub');
+  if (statTgtPct) {
+    const ttgt     = parseFloat(statTgtPct.dataset.totalTarget)   || 0;
+    const bnc3     = parseFloat(statTgtPct.dataset.baseNonCrypto) || 0;
+    const newVal3  = bnc3 + cryptoCatValue;
+    const newPct3  = ttgt > 0 ? Math.min(newVal3 / ttgt * 100, 100) : 0;
+    statTgtPct.textContent = newPct3.toFixed(1) + '%';
+    if (statTgtSub) statTgtSub.textContent = 'dari ' + (ttgt > 0 ? fmtIDR(ttgt) : 'Rp 0');
+  }
+
+  // ── Fix tgt-pnl visibility — unhide jika ada PnL ──
+  if (tgtPnl) {
+    const curPnlText = tgtPnl.textContent || '';
+    // Ambil nilai terbaru dari tgt-bar calculation
+    if (tgtBar && tgtBar.dataset.basePnl !== undefined) {
+      const bPnl  = parseFloat(tgtBar.dataset.basePnl)       || 0;
+      const bCPnl = parseFloat(tgtBar.dataset.baseCryptoPnl) || 0;
+      const latestTotalPnl = bPnl - bCPnl + cryptoCatPnl;
+      tgtPnl.textContent  = 'PnL: ' + sign(latestTotalPnl) + fmtIDR(latestTotalPnl);
+      tgtPnl.style.color  = catColor(latestTotalPnl);
+      tgtPnl.style.display = latestTotalPnl !== 0 ? 'block' : 'none';
+    }
   }
 }
 
