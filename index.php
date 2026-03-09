@@ -417,7 +417,15 @@ foreach (CATEGORIES as $cat => $cfg):
           $monthlyIncome = ($cat === 'property') ? getPropertyMonthlyIncome($inv) : null;
           $yieldProp     = ($cat === 'property') ? getPropertyYield($inv) : null;
         ?>
-        <div class="inv-item">
+        <div class="inv-item"<?php if ($cat === 'crypto'): ?>
+          data-crypto-row="1"
+          data-coin-id="<?= htmlspecialchars($coinId ?? '') ?>"
+          data-qty="<?= (float)($inv['qty'] ?? 0) ?>"
+          data-cost="<?= $cost ?>"
+          data-upnl="<?= (float)($inv['unrealized_pnl'] ?? 0) ?>"
+          data-rpnl="<?= (float)($inv['realized_pnl'] ?? 0) ?>"
+          data-inv-id="<?= $inv['id'] ?>"
+        <?php endif; ?>>
           <div class="inv-info">
             <div class="inv-name">
               <?= htmlspecialchars($inv['name'] ?: ($inv['ticker'] ?: '—')) ?>
@@ -449,9 +457,9 @@ foreach (CATEGORIES as $cat => $cfg):
             </div>
           </div>
           <div class="inv-value-wrap">
-            <div class="inv-value"><?= fmtIDR($cost) ?></div>
+            <div class="inv-value" <?php if($cat==='crypto'): ?>id="idx-val-<?= $inv['id'] ?>"<?php endif; ?>><?= fmtIDR($curVal) ?></div>
             <?php if ($cfg['has_pnl']): ?>
-            <div class="inv-pnl" style="color:var(--<?= pnlClass($pnl) ?>)">
+            <div class="inv-pnl" <?php if($cat==='crypto'): ?>id="idx-pnl-<?= $inv['id'] ?>"<?php endif; ?> style="color:var(--<?= pnlClass($pnl) ?>)">
               <?= pnlSign($pnl) . fmtIDR($pnl) ?> (<?= pnlSign($pnlPct) . number_format($pnlPct,2) ?>%)
             </div>
             <?php endif; ?>
@@ -632,25 +640,55 @@ function doExportPDF() {
 }
 
 // Auto-refresh crypto every 30s
+function updateCryptoDisplay() {
+  // Update badge harga live
+  (invData['crypto']||[]).forEach(inv => {
+    const coinId = inv.coin_id || inv.ticker?.toLowerCase();
+    const price  = cryptoPrices[coinId];
+    const liveEl = document.getElementById('live-' + inv.id);
+    if (liveEl && price) {
+      liveEl.className = 'crypto-live';
+      liveEl.innerHTML = `<span class="live-dot"></span>${inv.ticker} = ${fmtIDR(price)}`;
+    }
+  });
+
+  // Update nilai, PnL, PnL% per baris
+  document.querySelectorAll('[data-crypto-row]').forEach(row => {
+    const coinId = row.dataset.coinId;
+    const price  = cryptoPrices[coinId];
+    if (!price) return;
+
+    const qty    = parseFloat(row.dataset.qty)  || 0;
+    const cost   = parseFloat(row.dataset.cost)  || 0;
+    const upnl   = parseFloat(row.dataset.upnl)  || 0;
+    const rpnl   = parseFloat(row.dataset.rpnl)  || 0;
+    const id     = row.dataset.invId;
+
+    const curVal    = price * qty;
+    const priceDiff = curVal - cost;
+    const pnl       = priceDiff + upnl + rpnl;
+    const pnlPct    = cost > 0 ? (pnl / cost * 100) : 0;
+    const pnlColor  = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--text)';
+    const sign      = v => v >= 0 ? '+' : '';
+
+    const valEl = document.getElementById('idx-val-' + id);
+    const pnlEl = document.getElementById('idx-pnl-' + id);
+
+    if (valEl) valEl.textContent = fmtIDR(curVal);
+    if (pnlEl) {
+      pnlEl.textContent = `${sign(pnl)}${fmtIDR(pnl)} (${sign(pnlPct)}${pnlPct.toFixed(2)}%)`;
+      pnlEl.style.color = pnlColor;
+    }
+  });
+}
+
 setInterval(async () => {
   try {
     const r = await fetch(BASE_URL + 'api/crypto.php?action=prices');
     const d = await r.json();
     if (d.prices) { cryptoPrices = d.prices; updateCryptoDisplay(); }
   } catch(e) {}
-}, 30000);
-
-function updateCryptoDisplay() {
-  (invData['crypto']||[]).forEach(inv => {
-    const coinId = inv.coin_id || inv.ticker?.toLowerCase();
-    const price  = cryptoPrices[coinId];
-    const el     = document.getElementById('live-' + inv.id);
-    if (el && price) {
-      el.className = 'crypto-live';
-      el.innerHTML = `<span class="live-dot"></span>${inv.ticker} = ${fmtIDR(price)}`;
-    }
-  });
-}
+}, 8000);
 </script>
 
 <!-- ═══════════════════════════════════════════════
