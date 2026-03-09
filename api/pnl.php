@@ -17,10 +17,10 @@ if (!isLoggedIn()) {
  *   investment_id : int,
  *   kind          : 'unrealized' | 'realized',
  *   delta         : float  (+ untung, - rugi),
- *   -- crypto staking only --
+ *   -- crypto staking saja --
  *   add_qty       : bool   (optional),
  *   coin_id       : string (optional),
- *   price_idr     : float  (optional, harga 1 koin dalam IDR)
+ *   price_idr     : float  (optional)
  * }
  */
 if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
@@ -33,58 +33,30 @@ $invId = (int)($body['investment_id'] ?? 0);
 $kind  = $body['kind'] ?? 'unrealized';
 $delta = (float)($body['delta'] ?? 0);
 
-if (!$invId) {
-    echo json_encode(['success' => false, 'error' => 'investment_id required']);
-    exit;
-}
-if (!in_array($kind, ['unrealized', 'realized'])) {
-    echo json_encode(['success' => false, 'error' => 'kind harus unrealized atau realized']);
-    exit;
-}
-if ($delta == 0) {
-    echo json_encode(['success' => false, 'error' => 'Delta tidak boleh 0']);
-    exit;
-}
+if (!$invId) { echo json_encode(['success' => false, 'error' => 'investment_id required']); exit; }
+if (!in_array($kind, ['unrealized', 'realized'])) { echo json_encode(['success' => false, 'error' => 'kind harus unrealized atau realized']); exit; }
+if ($delta == 0) { echo json_encode(['success' => false, 'error' => 'Delta tidak boleh 0']); exit; }
 
 try {
-    $db = getDB();
-
-    // Pastikan kolom ada — graceful fallback jika migration belum jalan
-    $cols = $db->query("SHOW COLUMNS FROM investments LIKE 'realized_pnl'")->fetchAll();
-    if (empty($cols)) {
-        // Kolom belum ada, buat otomatis
-        $db->exec("ALTER TABLE investments ADD COLUMN unrealized_pnl DECIMAL(28,8) DEFAULT 0 AFTER note");
-        $db->exec("ALTER TABLE investments ADD COLUMN realized_pnl DECIMAL(28,8) DEFAULT 0 AFTER unrealized_pnl");
-    }
-
+    $db  = getDB();
     $col = $kind === 'realized' ? 'realized_pnl' : 'unrealized_pnl';
 
-    // Jika kolom unrealized_pnl juga belum ada, buat
-    $uCols = $db->query("SHOW COLUMNS FROM investments LIKE 'unrealized_pnl'")->fetchAll();
-    if (empty($uCols)) {
-        $db->exec("ALTER TABLE investments ADD COLUMN unrealized_pnl DECIMAL(28,8) DEFAULT 0 AFTER note");
-    }
-
-    // Update PnL
+    // NULL-safe update — kedua kolom sudah ada di DB
     $db->prepare(
-        "UPDATE investments SET $col = COALESCE($col, 0) + ? WHERE id = ?"
+        "UPDATE investments SET {$col} = COALESCE({$col}, 0) + ? WHERE id = ? AND is_sold = 0"
     )->execute([$delta, $invId]);
 
-    // Crypto staking: tambah qty koin berdasarkan IDR / harga
+    // Crypto staking: tambah qty koin = delta_IDR / harga_per_koin
     $newQty = null;
-    if (!empty($body['add_qty']) && !empty($body['price_idr']) && $body['price_idr'] > 0) {
-        $priceIDR = (float)$body['price_idr'];
-        // delta positif = untung = beli koin dari reward
-        // qty tambahan = delta_positif / harga_per_koin
-        $qtyToAdd = abs($delta) / $priceIDR;
-
+    if (!empty($body['add_qty']) && !empty($body['price_idr']) && (float)$body['price_idr'] > 0) {
+        $qtyToAdd = abs($delta) / (float)$body['price_idr'];
         $db->prepare(
-            "UPDATE investments SET qty = COALESCE(qty, 0) + ? WHERE id = ?"
+            "UPDATE investments SET qty = COALESCE(qty, 0) + ? WHERE id = ? AND is_sold = 0"
         )->execute([$qtyToAdd, $invId]);
 
-        $row = $db->prepare("SELECT qty FROM investments WHERE id = ?");
-        $row->execute([$invId]);
-        $newQty = (float)($row->fetch()['qty'] ?? 0);
+        $r = $db->prepare("SELECT qty FROM investments WHERE id = ?");
+        $r->execute([$invId]);
+        $newQty = (float)($r->fetch()['qty'] ?? 0);
     }
 
     // Ambil nilai terbaru
@@ -102,8 +74,5 @@ try {
     echo json_encode($result);
 
 } catch (Throwable $e) {
-    echo json_encode([
-        'success' => false,
-        'error'   => $e->getMessage(),
-    ]);
+    echo json_encode(['success' => false, 'error' => $e->getMessage()]);
 }
