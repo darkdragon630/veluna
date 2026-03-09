@@ -78,7 +78,7 @@ $bestCat = array_key_first($performers) ?? null;
      SUMMARY STATS — 6 kartu utama
 ════════════════════════════════════════════════ -->
 <?php
-  $upnl     = getTotalUnrealizedPnl();
+  $upnl     = getTotalUnrealizedPnl($cryptoPrices);
   $totalPnl = $upnl['net'] + $soldStats['total_realized_pnl'];
 ?>
 <div class="stats-grid">
@@ -667,7 +667,7 @@ function doExportPDF() {
   const extras = {
     cashBalance:    <?= $cashStats['balance'] ?>,
     cashStats:      <?= json_encode($cashStats) ?>,
-    unrealizedStats:<?= json_encode(getTotalUnrealizedPnl()) ?>,
+    unrealizedStats:<?= json_encode(getTotalUnrealizedPnl($cryptoPrices)) ?>,
     soldStats:      <?= json_encode($soldStats) ?>,
     totalPnl:       <?= $upnl['net'] + $soldStats['total_realized_pnl'] ?>,
   };
