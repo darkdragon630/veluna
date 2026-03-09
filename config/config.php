@@ -13,7 +13,6 @@ date_default_timezone_set('Asia/Jakarta');
 define('CURRENCY', 'IDR');
 define('COINGECKO_API', 'https://api.coingecko.com/api/v3');
 define('CRYPTO_CACHE_TTL', 60);
-define('SESSION_LIFETIME', 86400); // 24 jam
 
 ini_set('session.use_strict_mode','1');
 ini_set('session.use_only_cookies','1');
@@ -21,19 +20,29 @@ ini_set('session.cookie_httponly','1');
 ini_set('session.cookie_samesite','Strict');
 session_name(SESSION_NAME);
 if (session_status() === PHP_SESSION_NONE) {
-    session_set_cookie_params(['lifetime'=>86400,'httponly'=>true,'samesite'=>'Strict']);
+    session_set_cookie_params(['lifetime'=>0,'httponly'=>true,'samesite'=>'Strict']);
     session_start();
 }
-if (isset($_SESSION['_last_regen'])) {
-    if (time() - $_SESSION['_last_regen'] > SESSION_REGEN_INTERVAL) {
-        session_regenerate_id(true);
-        $_SESSION['_last_regen'] = time();
-    }
-} else { $_SESSION['_last_regen'] = time(); }
+
+// Session ID regeneration — HANYA untuk page biasa, bukan API request.
+// Jika dilakukan saat API call (fetch/XHR), cookie lama terhapus → logout.
+$_isApiReq = defined('API_REQUEST') && API_REQUEST === true;
+if (!$_isApiReq) {
+    if (isset($_SESSION['_last_regen'])) {
+        if (time() - $_SESSION['_last_regen'] > SESSION_REGEN_INTERVAL) {
+            session_regenerate_id(true);
+            $_SESSION['_last_regen'] = time();
+        }
+    } else { $_SESSION['_last_regen'] = time(); }
+}
+
+// UA hash — hanya set saat login, jangan destroy saat beda (fetch bisa beda UA minor)
 $__ua = md5(substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 80));
-if (isset($_SESSION['_ua_hash']) && $_SESSION['_ua_hash'] !== $__ua) {
-    session_destroy(); session_start(); $_SESSION['_ua_hash'] = $__ua;
-} else { $_SESSION['_ua_hash'] = $__ua; }
+if (!isset($_SESSION['_ua_hash'])) {
+    $_SESSION['_ua_hash'] = $__ua;
+}
+// Catatan: pengecekan UA dihapus karena fetch() dari browser bisa kirim UA berbeda
+// yang menyebabkan logout tak terduga. Security tetap dijaga via session token.
 
 function isLoggedIn(): bool {
     if (!isset($_SESSION['pf_auth'], $_SESSION['pf_user_id'])) return false;
@@ -144,8 +153,18 @@ function loginUser(array $user): void {
     $_SESSION['_ua_hash']    = md5(substr($_SERVER['HTTP_USER_AGENT'] ?? '', 0, 80));
 }
 if (!defined('ADMIN_USERNAME')) {
-    try { $__un = getDB()->query("SELECT username FROM auth_users LIMIT 1")->fetchColumn(); define('ADMIN_USERNAME',$__un?:'admin'); }
-    catch (Throwable) { define('ADMIN_USERNAME','admin'); }
+    // Jangan panggil getDB() di sini — bisa jalan sebelum database.php load
+    // ADMIN_USERNAME di-resolve lazy saat pertama kali dibutuhkan
+    define('ADMIN_USERNAME', '__pending__');
+}
+function resolveAdminUsername(): string {
+    if (defined('ADMIN_USERNAME') && ADMIN_USERNAME !== '__pending__') {
+        return ADMIN_USERNAME;
+    }
+    try {
+        $u = getDB()->query("SELECT username FROM auth_users LIMIT 1")->fetchColumn();
+        return $u ?: 'admin';
+    } catch (Throwable) { return 'admin'; }
 }
 if (!defined('BASE_URL')) {
     $__proto = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS']!=='off') ? 'https' : 'http';
