@@ -420,6 +420,7 @@ foreach (CATEGORIES as $cat => $cfg):
         <div class="inv-item"<?php if ($cat === 'crypto'): ?>
           data-crypto-row="1"
           data-coin-id="<?= htmlspecialchars($coinId ?? '') ?>"
+          data-ticker="<?= htmlspecialchars($inv['ticker'] ?? '') ?>"
           data-qty="<?= (float)($inv['qty'] ?? 0) ?>"
           data-cost="<?= $cost ?>"
           data-upnl="<?= (float)($inv['unrealized_pnl'] ?? 0) ?>"
@@ -641,18 +642,7 @@ function doExportPDF() {
 
 // Auto-refresh crypto every 30s
 function updateCryptoDisplay() {
-  // Update badge harga live
-  (invData['crypto']||[]).forEach(inv => {
-    const coinId = inv.coin_id || inv.ticker?.toLowerCase();
-    const price  = cryptoPrices[coinId];
-    const liveEl = document.getElementById('live-' + inv.id);
-    if (liveEl && price) {
-      liveEl.className = 'crypto-live';
-      liveEl.innerHTML = `<span class="live-dot"></span>${inv.ticker} = ${fmtIDR(price)}`;
-    }
-  });
-
-  // Update nilai, PnL, PnL% per baris
+  // Update semua baris crypto via data attributes (sumber truth = DOM)
   document.querySelectorAll('[data-crypto-row]').forEach(row => {
     const coinId = row.dataset.coinId;
     const price  = cryptoPrices[coinId];
@@ -663,6 +653,7 @@ function updateCryptoDisplay() {
     const upnl   = parseFloat(row.dataset.upnl)  || 0;
     const rpnl   = parseFloat(row.dataset.rpnl)  || 0;
     const id     = row.dataset.invId;
+    const ticker = row.dataset.ticker || '';
 
     const curVal    = price * qty;
     const priceDiff = curVal - cost;
@@ -671,24 +662,43 @@ function updateCryptoDisplay() {
     const pnlColor  = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--text)';
     const sign      = v => v >= 0 ? '+' : '';
 
+    // Update nilai
     const valEl = document.getElementById('idx-val-' + id);
-    const pnlEl = document.getElementById('idx-pnl-' + id);
-
     if (valEl) valEl.textContent = fmtIDR(curVal);
+
+    // Update PnL
+    const pnlEl = document.getElementById('idx-pnl-' + id);
     if (pnlEl) {
       pnlEl.textContent = `${sign(pnl)}${fmtIDR(pnl)} (${sign(pnlPct)}${pnlPct.toFixed(2)}%)`;
       pnlEl.style.color = pnlColor;
     }
+
+    // Update live badge harga (pakai id dari row, bukan dari invData)
+    const liveEl = document.getElementById('live-' + id);
+    if (liveEl && ticker) {
+      liveEl.className = 'crypto-live';
+      liveEl.innerHTML = `<span class="live-dot"></span>${ticker} = ${fmtIDR(price)}`;
+    }
   });
 }
 
-setInterval(async () => {
+// Fetch harga baru + update DOM
+async function fetchAndUpdateCrypto() {
   try {
     const r = await fetch(BASE_URL + 'api/crypto.php?action=auto');
     const d = await r.json();
-    if (d.prices) { cryptoPrices = d.prices; updateCryptoDisplay(); }
-  } catch(e) {}
-}, 65000);
+    if (d.prices && Object.keys(d.prices).length > 0) {
+      cryptoPrices = d.prices;
+    }
+  } catch(e) { /* network error, pakai harga lama */ }
+  updateCryptoDisplay(); // selalu update DOM, pakai harga terbaru yg ada
+}
+
+// Langsung update saat halaman pertama dibuka (tanpa tunggu 65 detik)
+fetchAndUpdateCrypto();
+
+// Kemudian ulangi tiap 65 detik
+setInterval(fetchAndUpdateCrypto, 65000);
 </script>
 
 <!-- ═══════════════════════════════════════════════
