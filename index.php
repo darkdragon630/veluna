@@ -240,15 +240,19 @@ foreach (CATEGORIES as $cat => $cfg):
 ?>
   <div class="pnl-chip" style="background:<?= $cfg['color'] ?>18;border:1px solid <?= $cfg['color'] ?>40;border-radius:10px;padding:10px 16px;flex:1;min-width:140px">
     <div style="font-size:11px;color:var(--text3);margin-bottom:5px"><?= $cfg['icon'] ?> <?= $cfg['label'] ?></div>
-    <div style="font-size:16px;font-weight:500;color:var(--<?= pnlClass($s['pnl']) ?>)"><?= pnlSign($s['pnl']) . fmtIDR($s['pnl']) ?></div>
-    <div style="font-size:10px;color:var(--text3);margin-top:3px"><?= pnlSign($s['pnlPct']) . number_format($s['pnlPct'],2) ?>%</div>
+    <div style="font-size:16px;font-weight:500" id="chip-pnl-<?= $cat ?>"><?= pnlSign($s['pnl']) . fmtIDR($s['pnl']) ?></div>
+    <div style="font-size:10px;color:var(--text3);margin-top:3px" id="chip-pct-<?= $cat ?>"><?= pnlSign($s['pnlPct']) . number_format($s['pnlPct'],2) ?>%</div>
   </div>
 <?php endforeach; ?>
   <!-- TOTAL -->
   <div class="pnl-chip" style="background:var(--gold-dim);border:1px solid rgba(240,180,41,0.4);border-radius:10px;padding:10px 16px;flex:1;min-width:140px">
     <div style="font-size:11px;color:var(--text3);margin-bottom:5px">📊 Total PnL</div>
-    <div style="font-size:16px;font-weight:600;color:var(--<?= pnlClass($allStats['pnl']) ?>)"><?= pnlSign($allStats['pnl']) . fmtIDR($allStats['pnl']) ?></div>
-    <div style="font-size:10px;color:var(--text3);margin-top:3px"><?= pnlSign($allStats['pnlPct']) . number_format($allStats['pnlPct'],2) ?>% dari modal</div>
+    <div style="font-size:16px;font-weight:600" id="chip-pnl-total"
+      data-base-pnl="<?= $allStats['pnl'] ?>"
+      data-base-cost="<?= $allStats['totalCost'] ?>"
+      data-base-crypto-pnl="<?= $catData['crypto']['stats']['pnl'] ?>"
+    ><?= pnlSign($allStats['pnl']) . fmtIDR($allStats['pnl']) ?></div>
+    <div style="font-size:10px;color:var(--text3);margin-top:3px" id="chip-pct-total"><?= pnlSign($allStats['pnlPct']) . number_format($allStats['pnlPct'],2) ?>% dari modal</div>
   </div>
 </div>
 
@@ -348,7 +352,7 @@ foreach (CATEGORIES as $cat => $cfg):
       </div>
     </div>
     <div class="cat-total-wrap">
-      <div class="cat-total"><?= fmtIDR($stats['totalValue']) ?></div>
+      <div class="cat-total" id="cattotal-<?= $cat ?>"><?= fmtIDR($stats['totalValue']) ?></div>
       <div class="cat-pct" style="color:<?= $cfg['color'] ?>"><?= number_format($progress,1) ?>% dari target</div>
     </div>
   </div>
@@ -367,7 +371,8 @@ foreach (CATEGORIES as $cat => $cfg):
   <div class="pnl-toggle" onclick="togglePnl('<?= $cat ?>')">
     <span>
       PnL Detail
-      <span class="badge badge-<?= pnlClass($stats['pnl']) ?>">
+      <span class="badge badge-<?= pnlClass($stats['pnl']) ?>" id="catbadge-<?= $cat ?>"
+            style="color:var(--<?= pnlClass($stats['pnl']) ?>)">
         <?= pnlSign($stats['pnl']) . fmtIDR($stats['pnl']) ?>
         (<?= pnlSign($stats['pnlPct']) . number_format($stats['pnlPct'],2) ?>%)
       </span>
@@ -642,7 +647,11 @@ function doExportPDF() {
 
 // Auto-refresh crypto every 30s
 function updateCryptoDisplay() {
-  // Update semua baris crypto via data attributes (sumber truth = DOM)
+  let cryptoCatValue = 0;
+  let cryptoCatCost  = 0;
+  let cryptoCatPnl   = 0;
+
+  // ── Update per-baris + kumpulkan total kategori ──
   document.querySelectorAll('[data-crypto-row]').forEach(row => {
     const coinId = row.dataset.coinId;
     const price  = cryptoPrices[coinId];
@@ -659,27 +668,75 @@ function updateCryptoDisplay() {
     const priceDiff = curVal - cost;
     const pnl       = priceDiff + upnl + rpnl;
     const pnlPct    = cost > 0 ? (pnl / cost * 100) : 0;
-    const pnlColor  = pnl > 0 ? 'var(--green)' : pnl < 0 ? 'var(--red)' : 'var(--text)';
+    const pnlColor  = v => v > 0 ? 'var(--green)' : v < 0 ? 'var(--red)' : 'var(--text)';
     const sign      = v => v >= 0 ? '+' : '';
 
-    // Update nilai
+    // Update nilai baris
     const valEl = document.getElementById('idx-val-' + id);
     if (valEl) valEl.textContent = fmtIDR(curVal);
 
-    // Update PnL
+    // Update PnL baris
     const pnlEl = document.getElementById('idx-pnl-' + id);
     if (pnlEl) {
       pnlEl.textContent = `${sign(pnl)}${fmtIDR(pnl)} (${sign(pnlPct)}${pnlPct.toFixed(2)}%)`;
-      pnlEl.style.color = pnlColor;
+      pnlEl.style.color = pnlColor(pnl);
     }
 
-    // Update live badge harga (pakai id dari row, bukan dari invData)
+    // Update live badge harga
     const liveEl = document.getElementById('live-' + id);
     if (liveEl && ticker) {
       liveEl.className = 'crypto-live';
       liveEl.innerHTML = `<span class="live-dot"></span>${ticker} = ${fmtIDR(price)}`;
     }
+
+    // Akumulasi untuk total kategori
+    cryptoCatValue += curVal;
+    cryptoCatCost  += cost;
+    cryptoCatPnl   += pnl;
   });
+
+  if (cryptoCatCost === 0) return;
+  const cryptoPnlPct = cryptoCatPnl / cryptoCatCost * 100;
+  const catColor     = v => v > 0 ? 'var(--green)' : v < 0 ? 'var(--red)' : 'var(--text)';
+  const sign         = v => v >= 0 ? '+' : '';
+
+  // ── Update total nilai di cat-card header ──
+  const catTotalEl = document.getElementById('cattotal-crypto');
+  if (catTotalEl) catTotalEl.textContent = fmtIDR(cryptoCatValue);
+
+  // ── Update PnL badge di pnl-toggle header ──
+  const catBadgeEl = document.getElementById('catbadge-crypto');
+  if (catBadgeEl) {
+    catBadgeEl.textContent = `${sign(cryptoCatPnl)}${fmtIDR(cryptoCatPnl)} (${sign(cryptoPnlPct)}${cryptoPnlPct.toFixed(2)}%)`;
+    const bcls = cryptoCatPnl > 0 ? 'badge-green' : cryptoCatPnl < 0 ? 'badge-red' : 'badge-neutral';
+    catBadgeEl.className  = 'badge ' + bcls;
+    catBadgeEl.style.color = catColor(cryptoCatPnl);
+  }
+
+  // ── Update pnl-chip di breakdown ──
+  const chipPnlEl = document.getElementById('chip-pnl-crypto');
+  if (chipPnlEl) {
+    chipPnlEl.innerHTML = `${sign(cryptoCatPnl)}${fmtIDR(cryptoCatPnl)}`;
+    chipPnlEl.style.color = catColor(cryptoCatPnl);
+    chipPnlEl.style.fontWeight = '500';
+  }
+  const chipPctEl = document.getElementById('chip-pct-crypto');
+  if (chipPctEl) chipPctEl.textContent = `${sign(cryptoPnlPct)}${cryptoPnlPct.toFixed(2)}%`;
+
+  // ── Update total PnL chip (chip-pnl-total) ──
+  // Hitung delta dari perubahan crypto saja, tambahkan ke total yg sudah ada di DOM
+  const totalChipEl = document.getElementById('chip-pnl-total');
+  const totalPctEl  = document.getElementById('chip-pct-total');
+  if (totalChipEl && totalChipEl.dataset.basePnl !== undefined) {
+    const basePnl  = parseFloat(totalChipEl.dataset.basePnl)  || 0;
+    const baseCost = parseFloat(totalChipEl.dataset.baseCost)  || 0;
+    const baseCryptoPnl = parseFloat(totalChipEl.dataset.baseCryptoPnl) || 0;
+    const newTotal = basePnl - baseCryptoPnl + cryptoCatPnl;
+    const newTotalPct = baseCost > 0 ? newTotal / baseCost * 100 : 0;
+    totalChipEl.textContent = `${sign(newTotal)}${fmtIDR(newTotal)}`;
+    totalChipEl.style.color = catColor(newTotal);
+    if (totalPctEl) totalPctEl.textContent = `${sign(newTotalPct)}${newTotalPct.toFixed(2)}% dari modal`;
+  }
 }
 
 // Fetch harga baru + update DOM
