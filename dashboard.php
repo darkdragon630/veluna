@@ -49,15 +49,25 @@ foreach (CATEGORIES as $cat => $cfg) {
 
 <!-- SUMMARY BAR -->
 <div class="stats-grid" style="grid-template-columns:repeat(4,1fr);margin-bottom:24px">
+  <?php $dbCryptoStats = $catData['crypto']['stats']; ?>
   <div class="stat-card">
     <div class="stat-label">Total Portfolio</div>
-    <div class="stat-value gold"><?= fmtIDR($allStats['totalValue']) ?></div>
+    <div class="stat-value gold" id="db-total-porto"
+         data-base-non-crypto="<?= $allStats['totalValue'] - $dbCryptoStats['totalValue'] ?>"
+    ><?= fmtIDR($allStats['totalValue']) ?></div>
     <div class="stat-sub">Nilai aktif saat ini</div>
   </div>
-  <div class="stat-card">
+  <div class="stat-card"
+       id="db-totalpnl-card"
+       data-base-realized="<?= $soldStats['total_realized_pnl'] ?? 0 ?>"
+       data-base-non-crypto-pnl="<?= $allStats['pnl'] - $dbCryptoStats['pnl'] ?>"
+       data-base-crypto-pnl="<?= $dbCryptoStats['pnl'] ?>"
+       data-base-cost="<?= $allStats['totalCost'] ?>">
     <div class="stat-label">Total PnL</div>
-    <div class="stat-value <?= pnlClass($allStats['pnl']) ?>"><?= pnlSign($allStats['pnl']) . fmtIDR($allStats['pnl']) ?></div>
-    <div class="stat-sub"><?= pnlSign($allStats['pnlPct']) . number_format($allStats['pnlPct'],2) ?>% keseluruhan</div>
+    <div class="stat-value" id="db-totalpnl-val"
+         style="color:var(--<?= pnlClass($allStats['pnl']) ?>)"
+    ><?= pnlSign($allStats['pnl']) . fmtIDR($allStats['pnl']) ?></div>
+    <div class="stat-sub" id="db-totalpnl-sub"><?= pnlSign($allStats['pnlPct']) . number_format($allStats['pnlPct'],2) ?>% keseluruhan</div>
   </div>
   <div class="stat-card">
     <div class="stat-label">Total Modal</div>
@@ -285,19 +295,27 @@ foreach (CATEGORIES as $cat => $cfg) {
 ════════════════════════════════════════════════ -->
 <div class="section-title" id="pnl-summary" style="margin-top:36px">📊 Ringkasan <span>PnL</span></div>
 <div class="stats-grid" style="margin-bottom:28px">
-  <div class="stat-card" style="border-color:rgba(34,197,94,0.3)">
+  <div class="stat-card" style="border-color:rgba(34,197,94,0.3)"
+       id="db-upnl-profit-card"
+       data-base-non-crypto="<?= max(0, $unrealizedStats['profit'] - max(0, $dbCryptoStats['pnl'])) ?>"
+       data-base-crypto-pnl="<?= $dbCryptoStats['pnl'] ?>">
     <div class="stat-label">📈 Unrealized Profit</div>
-    <div class="stat-value green"><?= fmtIDR($unrealizedStats['profit']) ?></div>
+    <div class="stat-value green" id="db-upnl-profit"><?= fmtIDR($unrealizedStats['profit']) ?></div>
     <div class="stat-sub">Keuntungan belum terealisasi</div>
   </div>
-  <div class="stat-card" style="border-color:rgba(239,68,68,0.3)">
+  <div class="stat-card" style="border-color:rgba(239,68,68,0.3)"
+       id="db-upnl-loss-card"
+       data-base-non-crypto="<?= $unrealizedStats['loss'] - max(0, -$dbCryptoStats['pnl']) ?>">
     <div class="stat-label">📉 Unrealized Loss</div>
-    <div class="stat-value red"><?= fmtIDR($unrealizedStats['loss']) ?></div>
+    <div class="stat-value red" id="db-upnl-loss"><?= fmtIDR($unrealizedStats['loss']) ?></div>
     <div class="stat-sub">Kerugian belum terealisasi</div>
   </div>
-  <div class="stat-card">
+  <div class="stat-card" id="db-net-upnl-card"
+       data-base-non-crypto-pnl="<?= $unrealizedStats['net'] - $dbCryptoStats['pnl'] ?>">
     <div class="stat-label">💹 Net Unrealized PnL</div>
-    <div class="stat-value <?= pnlClass($unrealizedStats['net']) ?>"><?= pnlSign($unrealizedStats['net']) . fmtIDR($unrealizedStats['net']) ?></div>
+    <div class="stat-value" id="db-net-upnl-val"
+         style="color:var(--<?= pnlClass($unrealizedStats['net']) ?>)"
+    ><?= pnlSign($unrealizedStats['net']) . fmtIDR($unrealizedStats['net']) ?></div>
     <div class="stat-sub">Posisi aktif (belum dijual)</div>
   </div>
   <div class="stat-card" style="border-color:rgba(240,180,41,0.3)">
@@ -338,7 +356,10 @@ $totalProg   = $totalTarget > 0 ? min($allStats['totalValue']/$totalTarget*100,1
     <div style="display:flex;align-items:center;gap:16px">
       <div style="text-align:right">
         <div style="font-size:11px;color:var(--text3)">Nilai Saat Ini</div>
-        <div style="font-size:20px;font-weight:500;color:var(--gold)"><?= fmtIDR($allStats['totalValue']) ?></div>
+        <div style="font-size:20px;font-weight:500;color:var(--gold)"
+             id="db-tgt-porto-val"
+             data-base-non-crypto="<?= $allStats['totalValue'] - $dbCryptoStats['totalValue'] ?>"
+        ><?= fmtIDR($allStats['totalValue']) ?></div>
       </div>
       <div style="text-align:right">
         <div style="font-size:11px;color:var(--text3)">Target Total</div>
@@ -346,19 +367,24 @@ $totalProg   = $totalTarget > 0 ? min($allStats['totalValue']/$totalTarget*100,1
       </div>
       <div style="text-align:right">
         <div style="font-size:11px;color:var(--text3)">Tercapai</div>
-        <div style="font-size:24px;font-weight:700;color:var(--gold)"><?= number_format($totalProg,1) ?>%</div>
+        <div style="font-size:24px;font-weight:700;color:var(--gold)"
+             id="db-tgt-pct"
+             data-total-target="<?= $totalTarget ?>"
+             data-base-non-crypto="<?= $allStats['totalValue'] - $dbCryptoStats['totalValue'] ?>"
+        ><?= number_format($totalProg,1) ?>%</div>
       </div>
     </div>
   </div>
   <div class="progress-bg" style="height:8px">
-    <div class="progress-fill" style="width:<?= $totalProg ?>%;background:linear-gradient(90deg,#e5a000,#f0b429)"></div>
+    <div class="progress-fill" id="db-tgt-bar"
+         data-total-target="<?= $totalTarget ?>"
+         data-base-non-crypto="<?= $allStats['totalValue'] - $dbCryptoStats['totalValue'] ?>"
+         style="width:<?= $totalProg ?>%;background:linear-gradient(90deg,#e5a000,#f0b429)"></div>
   </div>
-  <?php if($totalTarget>0): ?>
   <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);margin-top:6px">
-    <span>Sisa: <?= fmtIDR(max(0,$totalTarget-$allStats['totalValue'])) ?></span>
-    <span><?= $totalProg>=100 ? '✅ Target tercapai!' : 'Terus semangat!' ?></span>
+    <span id="db-tgt-sisa"><?= $totalTarget>0 ? 'Sisa: '.fmtIDR(max(0,$totalTarget-$allStats['totalValue'])) : '' ?></span>
+    <span id="db-tgt-status"><?= $totalProg>=100 ? '✅ Target tercapai!' : ($totalTarget>0 ? 'Terus semangat!' : '') ?></span>
   </div>
-  <?php endif; ?>
 </div>
 
 <!-- Per-category target inputs -->
@@ -373,16 +399,24 @@ $totalProg   = $totalTarget > 0 ? min($allStats['totalValue']/$totalTarget*100,1
     <span style="font-size:20px;width:32px;height:32px;display:flex;align-items:center;justify-content:center;background:<?= $cfg['color'] ?>20;border-radius:8px"><?= $cfg['icon'] ?></span>
     <div style="flex:1">
       <div style="font-family:var(--font-head);font-weight:700;font-size:13px"><?= $cfg['label'] ?></div>
-      <div style="font-size:10px;color:var(--text3)"><?= $s['count'] ?> investasi · <?= fmtIDR($s['totalValue']) ?></div>
+      <div style="font-size:10px;color:var(--text3)"
+           <?php if($cat==='crypto'): ?>id="db-cat-sub-crypto"<?php endif; ?>
+      ><?= $s['count'] ?> investasi · <?= fmtIDR($s['totalValue']) ?></div>
     </div>
     <?php if($cfg['has_pnl'] && $s['count']>0): ?>
-    <span class="badge badge-<?= pnlClass($s['pnl']) ?>" style="font-size:10px">
+    <span class="badge badge-<?= pnlClass($s['pnl']) ?>" style="font-size:10px"
+          <?php if($cat==='crypto'): ?>id="db-cat-badge-crypto"<?php endif; ?>>
       <?= pnlSign($s['pnl']) . fmtIDR($s['pnl']) ?>
     </span>
     <?php endif; ?>
   </div>
   <div class="progress-bg" style="height:4px;margin-bottom:10px">
-    <div class="progress-fill" style="width:<?= $pct ?>%;background:<?= $cfg['color'] ?>"></div>
+    <div class="progress-fill"
+         <?php if($cat==='crypto'): ?>
+           id="db-cat-bar-crypto"
+           data-tgt="<?= $tgt ?>"
+         <?php endif; ?>
+         style="width:<?= $pct ?>%;background:<?= $cfg['color'] ?>"></div>
   </div>
   <div style="display:flex;align-items:center;gap:8px">
     <div style="flex:1">
@@ -393,7 +427,9 @@ $totalProg   = $totalTarget > 0 ? min($allStats['totalValue']/$totalTarget*100,1
         oninput="updateTargetPreview('<?= $cat ?>')">
     </div>
     <div style="text-align:right;min-width:55px">
-      <div style="font-size:18px;font-weight:600;color:<?= $cfg['color'] ?>"><?= number_format($pct,1) ?>%</div>
+      <div style="font-size:18px;font-weight:600;color:<?= $cfg['color'] ?>"
+           <?php if($cat==='crypto'): ?>id="db-cat-pct-crypto"<?php endif; ?>
+      ><?= number_format($pct,1) ?>%</div>
       <div style="font-size:9px;color:var(--text3)"><?= $tgt>0?fmtIDR($tgt):'Belum diset' ?></div>
     </div>
     <button class="btn btn-outline btn-xs" onclick="saveTarget('<?= $cat ?>')" title="Simpan target kategori ini">✓</button>
@@ -1015,7 +1051,7 @@ function updateCryptoDashboard(newPrices) {
     _cryptoCatPnl  += pnl;
   });
 
-  // ── Update header kategori crypto (badge + total) ──
+  // ── Update header kategori crypto (table badge + total) ──
   if (_cryptoCatCost > 0) {
     const catPnlPct  = _cryptoCatPnl / _cryptoCatCost * 100;
     const sign2      = v => v >= 0 ? '+' : '';
@@ -1028,9 +1064,102 @@ function updateCryptoDashboard(newPrices) {
       badgeEl.className   = 'badge ' + catCls(_cryptoCatPnl);
       badgeEl.style.color = catColor(_cryptoCatPnl);
     }
-
     const totalEl = document.getElementById('dash-cattotal-crypto');
     if (totalEl) totalEl.textContent = 'Total: ' + fmtIDR(_cryptoCatVal);
+  }
+
+  const sign   = v => v >= 0 ? '+' : '';
+  const cc     = v => v > 0 ? 'var(--green)' : v < 0 ? 'var(--red)' : 'var(--text)';
+  const ccCls  = v => v > 0 ? 'badge-green' : v < 0 ? 'badge-red' : 'badge-neutral';
+
+  // ── Top summary: Total Portfolio ──
+  const dbPortoEl = document.getElementById('db-total-porto');
+  if (dbPortoEl) {
+    const bnc = parseFloat(dbPortoEl.dataset.baseNonCrypto) || 0;
+    dbPortoEl.textContent = fmtIDR(bnc + _cryptoCatVal);
+  }
+
+  // ── Top summary: Total PnL ──
+  const dbPnlCard = document.getElementById('db-totalpnl-card');
+  const dbPnlVal  = document.getElementById('db-totalpnl-val');
+  const dbPnlSub  = document.getElementById('db-totalpnl-sub');
+  if (dbPnlCard && dbPnlVal) {
+    const bReal   = parseFloat(dbPnlCard.dataset.baseRealized)     || 0;
+    const bNcPnl  = parseFloat(dbPnlCard.dataset.baseNonCryptoPnl) || 0;
+    const bCost   = parseFloat(dbPnlCard.dataset.baseCost)         || 0;
+    const newUnreal = bNcPnl + _cryptoCatPnl;
+    const newTotal  = newUnreal + bReal;
+    const newPct    = bCost > 0 ? newTotal / bCost * 100 : 0;
+    dbPnlVal.textContent = sign(newTotal) + fmtIDR(newTotal);
+    dbPnlVal.style.color = cc(newTotal);
+    if (dbPnlSub) dbPnlSub.textContent = sign(newPct) + newPct.toFixed(2) + '% keseluruhan';
+  }
+
+  // ── Ringkasan PnL: Net Unrealized ──
+  const dbNetCard = document.getElementById('db-net-upnl-card');
+  const dbNetVal  = document.getElementById('db-net-upnl-val');
+  if (dbNetCard && dbNetVal) {
+    const bNcPnl2  = parseFloat(dbNetCard.dataset.baseNonCryptoPnl) || 0;
+    const newNet   = bNcPnl2 + _cryptoCatPnl;
+    dbNetVal.textContent = sign(newNet) + fmtIDR(newNet);
+    dbNetVal.style.color = cc(newNet);
+  }
+
+  // ── Ringkasan PnL: Unrealized Profit ──
+  const dbProfitCard = document.getElementById('db-upnl-profit-card');
+  const dbProfitVal  = document.getElementById('db-upnl-profit');
+  if (dbProfitCard && dbProfitVal) {
+    const bNc3  = parseFloat(dbProfitCard.dataset.baseNonCrypto) || 0;
+    const gain  = Math.max(0, _cryptoCatPnl);
+    dbProfitVal.textContent = fmtIDR(bNc3 + gain);
+  }
+
+  // ── Ringkasan PnL: Unrealized Loss ──
+  const dbLossCard = document.getElementById('db-upnl-loss-card');
+  const dbLossVal  = document.getElementById('db-upnl-loss');
+  if (dbLossCard && dbLossVal) {
+    const bNc4  = parseFloat(dbLossCard.dataset.baseNonCrypto) || 0;
+    const loss  = Math.abs(Math.min(0, _cryptoCatPnl));
+    dbLossVal.textContent = fmtIDR(bNc4 + loss);
+  }
+
+  // ── Target Total Portofolio ──
+  const dbTgtPorto = document.getElementById('db-tgt-porto-val');
+  const dbTgtPct   = document.getElementById('db-tgt-pct');
+  const dbTgtBar   = document.getElementById('db-tgt-bar');
+  const dbTgtSisa  = document.getElementById('db-tgt-sisa');
+  const dbTgtStat  = document.getElementById('db-tgt-status');
+  if (dbTgtPorto) {
+    const bnc5 = parseFloat(dbTgtPorto.dataset.baseNonCrypto) || 0;
+    dbTgtPorto.textContent = fmtIDR(bnc5 + _cryptoCatVal);
+  }
+  if (dbTgtPct) {
+    const ttgt = parseFloat(dbTgtPct.dataset.totalTarget) || 0;
+    const bnc6 = parseFloat(dbTgtPct.dataset.baseNonCrypto) || 0;
+    const nv   = bnc6 + _cryptoCatVal;
+    const np   = ttgt > 0 ? Math.min(nv / ttgt * 100, 100) : 0;
+    dbTgtPct.textContent = np.toFixed(1) + '%';
+    if (dbTgtBar) dbTgtBar.style.width = np.toFixed(2) + '%';
+    if (dbTgtSisa) dbTgtSisa.textContent = ttgt > 0 ? 'Sisa: ' + fmtIDR(Math.max(0, ttgt - nv)) : '';
+    if (dbTgtStat) dbTgtStat.textContent = np >= 100 ? '✅ Target tercapai!' : (ttgt > 0 ? 'Terus semangat!' : '');
+  }
+
+  // ── Per-category crypto card di grid target ──
+  const dbCatSub   = document.getElementById('db-cat-sub-crypto');
+  const dbCatBadge = document.getElementById('db-cat-badge-crypto');
+  const dbCatBar   = document.getElementById('db-cat-bar-crypto');
+  const dbCatPct   = document.getElementById('db-cat-pct-crypto');
+  if (dbCatSub)   dbCatSub.textContent = `1 investasi · ${fmtIDR(_cryptoCatVal)}`;
+  if (dbCatBadge && _cryptoCatCost > 0) {
+    dbCatBadge.textContent = sign(_cryptoCatPnl) + fmtIDR(_cryptoCatPnl);
+    dbCatBadge.className   = 'badge ' + ccCls(_cryptoCatPnl);
+    dbCatBadge.style.color = cc(_cryptoCatPnl);
+  }
+  if (dbCatBar) {
+    const catTgt = parseFloat(dbCatBar.dataset.tgt) || 0;
+    const catNp  = catTgt > 0 ? Math.min(_cryptoCatVal / catTgt * 100, 100) : 0;
+    dbCatBar.style.width = catNp.toFixed(2) + '%';
+    if (dbCatPct) dbCatPct.textContent = catNp.toFixed(1) + '%';
   }
 }
 
