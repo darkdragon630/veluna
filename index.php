@@ -85,7 +85,9 @@ $bestCat = array_key_first($performers) ?? null;
   <!-- Baris 1: Portofolio -->
   <div class="stat-card">
     <div class="stat-label">Total Portofolio</div>
-    <div class="stat-value gold"><?= fmtIDR($allStats['totalValue']) ?></div>
+    <div class="stat-value gold" id="stat-total-porto"
+         data-base-non-crypto="<?= $allStats['totalValue'] - ($catData['crypto']['stats']['totalValue'] ?? 0) ?>"
+    ><?= fmtIDR($allStats['totalValue']) ?></div>
     <div class="stat-sub">Nilai aktif semua aset</div>
   </div>
   <div class="stat-card">
@@ -271,28 +273,39 @@ foreach (CATEGORIES as $cat => $cfg):
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-bottom:14px">
     <div>
       <div style="font-family:var(--font-head);font-size:14px;font-weight:700">🏆 Total Portofolio</div>
-      <div style="font-size:11px;color:var(--text3);margin-top:3px">
+      <div id="tgt-sub" style="font-size:11px;color:var(--text3);margin-top:3px">
         <?= fmtIDR($allStats['totalValue']) ?> dari <?= $totalTarget>0 ? fmtIDR($totalTarget) : 'Belum diset' ?>
       </div>
     </div>
     <div style="text-align:right">
-      <div style="font-size:24px;font-weight:600;color:var(--gold)"><?= number_format($totalProgress,1) ?>%</div>
-      <?php if($allStats['pnl'] != 0): ?>
-      <div style="font-size:11px;color:var(--<?= pnlClass($allStats['pnl']) ?>)">
+      <div id="tgt-pct" style="font-size:24px;font-weight:600;color:var(--gold)"><?= number_format($totalProgress,1) ?>%</div>
+      <div id="tgt-pnl" style="font-size:11px;color:var(--<?= pnlClass($allStats['pnl']) ?>)"
+           <?php if($allStats['pnl'] == 0): ?>style="display:none"<?php endif; ?>>
         PnL: <?= pnlSign($allStats['pnl']) . fmtIDR($allStats['pnl']) ?>
       </div>
-      <?php endif; ?>
     </div>
   </div>
   <div class="progress-bg" style="height:10px">
-    <div class="progress-fill" style="width:<?= $totalProgress ?>%;background:linear-gradient(90deg,#e5a000,#f0b429)"></div>
+    <?php
+      $cryptoStats   = $catData['crypto']['stats'];
+      $nonCryptoVal  = $allStats['totalValue'] - $cryptoStats['totalValue'];
+      $nonCryptoPnl  = $allStats['pnl']        - $cryptoStats['pnl'];
+    ?>
+    <div class="progress-fill" id="tgt-bar"
+      data-total-target="<?= $totalTarget ?>"
+      data-base-non-crypto="<?= $nonCryptoVal ?>"
+      data-base-pnl="<?= $allStats['pnl'] ?>"
+      data-base-crypto-pnl="<?= $cryptoStats['pnl'] ?>"
+      style="width:<?= $totalProgress ?>%;background:linear-gradient(90deg,#e5a000,#f0b429)"></div>
   </div>
-  <?php if($totalTarget > 0): ?>
-  <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);margin-top:7px">
-    <span>Sisa: <?= fmtIDR(max(0,$totalTarget-$allStats['totalValue'])) ?></span>
-    <span><?= $totalProgress >= 100 ? '✅ Target tercapai!' : number_format($totalProgress,1).'% tercapai' ?></span>
+  <div style="display:flex;justify-content:space-between;font-size:10px;color:var(--text3);margin-top:7px" id="tgt-footer">
+    <?php if($totalTarget > 0): ?>
+    <span id="tgt-sisa">Sisa: <?= fmtIDR(max(0,$totalTarget-$allStats['totalValue'])) ?></span>
+    <span id="tgt-status"><?= $totalProgress >= 100 ? '✅ Target tercapai!' : number_format($totalProgress,1).'% tercapai' ?></span>
+    <?php else: ?>
+    <span id="tgt-sisa"></span><span id="tgt-status"></span>
+    <?php endif; ?>
   </div>
-  <?php endif; ?>
 </div>
 
 <!-- Per-category targets grid -->
@@ -736,6 +749,37 @@ function updateCryptoDisplay() {
     totalChipEl.textContent = `${sign(newTotal)}${fmtIDR(newTotal)}`;
     totalChipEl.style.color = catColor(newTotal);
     if (totalPctEl) totalPctEl.textContent = `${sign(newTotalPct)}${newTotalPct.toFixed(2)}% dari modal`;
+  }
+
+  // ── Update Target Investasi — Total Portofolio bar ──
+  const tgtBar    = document.getElementById('tgt-bar');
+  const tgtPct    = document.getElementById('tgt-pct');
+  const tgtSub    = document.getElementById('tgt-sub');
+  const tgtPnl    = document.getElementById('tgt-pnl');
+  const tgtSisa   = document.getElementById('tgt-sisa');
+  const tgtStatus = document.getElementById('tgt-status');
+  if (tgtBar && tgtBar.dataset.totalTarget !== undefined) {
+    const totalTarget    = parseFloat(tgtBar.dataset.totalTarget)    || 0;
+    const baseNonCrypto  = parseFloat(tgtBar.dataset.baseNonCrypto)  || 0;
+    const basePnl        = parseFloat(tgtBar.dataset.basePnl)        || 0;
+    const baseCryptoPnl  = parseFloat(tgtBar.dataset.baseCryptoPnl)  || 0;
+    const newPortoVal    = baseNonCrypto + cryptoCatValue;
+    const newPct         = totalTarget > 0 ? Math.min(newPortoVal / totalTarget * 100, 100) : 0;
+    const newTotalPnl    = basePnl - baseCryptoPnl + cryptoCatPnl;
+
+    tgtBar.style.width = newPct.toFixed(2) + '%';
+    if (tgtPct)    tgtPct.textContent    = newPct.toFixed(1) + '%';
+    if (tgtSub)    tgtSub.textContent    = fmtIDR(newPortoVal) + ' dari ' + (totalTarget > 0 ? fmtIDR(totalTarget) : 'Belum diset');
+    if (tgtPnl)    { tgtPnl.textContent  = 'PnL: ' + sign(newTotalPnl) + fmtIDR(newTotalPnl); tgtPnl.style.color = catColor(newTotalPnl); }
+    if (tgtSisa)   tgtSisa.textContent   = totalTarget > 0 ? 'Sisa: ' + fmtIDR(Math.max(0, totalTarget - newPortoVal)) : '';
+    if (tgtStatus) tgtStatus.textContent = newPct >= 100 ? '✅ Target tercapai!' : newPct.toFixed(1) + '% tercapai';
+  }
+
+  // ── Update stat card "Total Portofolio" di summary atas ──
+  const statPortoEl = document.getElementById('stat-total-porto');
+  if (statPortoEl) {
+    const baseNonCrypto2 = parseFloat(statPortoEl.dataset.baseNonCrypto) || 0;
+    statPortoEl.textContent = fmtIDR(baseNonCrypto2 + cryptoCatValue);
   }
 }
 
