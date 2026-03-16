@@ -137,7 +137,7 @@ foreach (CATEGORIES as $cat => $cfg) {
           <th class="td-right">Nilai Saat Ini</th>
           <?php if ($cfg['has_pnl']): ?>
             <th class="td-right">PnL</th><th class="td-right">PnL%</th>
-            <th class="td-right"><?= $cat === 'property' ? 'Yield / Bulan' : 'Unrealized' ?></th>
+            <th class="td-right"><?= $cat === 'property' ? 'Pendapatan / Yield' : 'Unrealized' ?></th>
           <?php else: ?><th colspan="2">—</th><?php endif; ?>
           <th class="td-center">Tanggal</th>
           <th class="td-center">Aksi</th>
@@ -214,10 +214,20 @@ foreach (CATEGORIES as $cat => $cfg) {
           <td class="td-right td-mono" <?php if($cat==='crypto'): ?>id="crypto-pct-<?= $inv['id'] ?>"<?php endif; ?> style="color:var(--<?= pnlClass($pnl) ?>)"><?= pnlSign($pnlPct) . number_format($pnlPct,2) ?>%</td>
           <td class="td-right td-mono" style="font-size:11px">
             <?php if ($cat === 'property'): ?>
-              <?php $mi = getPropertyMonthlyIncome($inv); $yi = getPropertyYield($inv); ?>
+              <?php
+                $mi  = getPropertyMonthlyIncome($inv);
+                $yi  = getPropertyYield($inv);
+                $mdy = $mi > 0 ? $mi / 30 : 0;
+                $mya = $mi * 12;
+              ?>
               <?php if ($mi > 0): ?>
-                <div style="color:var(--green);font-weight:600"><?= fmtIDR($mi) ?>/bln</div>
-                <div style="color:var(--gold);font-size:10px"><?= number_format($yi,2) ?>%/thn</div>
+                <div style="color:var(--text3);font-size:9px">📅 Harian</div>
+                <div style="color:var(--green);font-size:11px;font-weight:600;margin-bottom:2px"><?= fmtIDR($mdy) ?>/hr</div>
+                <div style="color:var(--text3);font-size:9px">📆 Bulanan</div>
+                <div style="color:var(--green);font-size:11px;font-weight:600;margin-bottom:2px"><?= fmtIDR($mi) ?>/bln</div>
+                <div style="color:var(--text3);font-size:9px">📊 Tahunan</div>
+                <div style="color:var(--gold);font-size:11px;font-weight:600"><?= fmtIDR($mya) ?>/thn</div>
+                <div style="color:var(--gold);font-size:9px;margin-top:2px"><?= number_format($yi,2) ?>% yield/thn</div>
               <?php else: ?><span style="color:var(--text3)">—</span><?php endif; ?>
             <?php else: ?>
               <?php if ($upnl != 0): ?>
@@ -264,6 +274,16 @@ foreach (CATEGORIES as $cat => $cfg) {
                 style="color:var(--gold)"
                 title="Catat PnL"
                 onclick="openPnlModal(<?= $inv['id'] ?>, '<?= htmlspecialchars(addslashes($inv['name'] ?: ($inv['ticker'] ?: 'Investasi'))) ?>', <?= $upnl2 ?>, <?= $rpnl2 ?>, '<?= $cat ?>')">±</button>
+              <?php endif; ?>
+              <?php if ($cat === 'property'): ?>
+              <?php
+                $miBtn = getPropertyMonthlyIncome($inv);
+                $yiBtn = getPropertyYield($inv);
+              ?>
+              <button class="btn btn-outline btn-xs"
+                style="color:var(--green)"
+                title="Update Yield / Pendapatan"
+                onclick="openYieldModal(<?= $inv['id'] ?>, '<?= htmlspecialchars(addslashes($inv['name'] ?: 'Properti')) ?>', <?= (float)($inv['buy_price'] ?? 0) ?>, <?= $miBtn ?>, <?= $yiBtn ?>)">🏠</button>
               <?php endif; ?>
               <?php if ($cat === 'crypto'): ?>
               <?php
@@ -681,6 +701,77 @@ $totalProg   = $totalTarget > 0 ? min($allStats['totalValue']/$totalTarget*100,1
   </div>
 </div>
 
+<!-- ================== YIELD UPDATE MODAL ================== -->
+<div class="modal-overlay" id="yield-modal">
+  <div class="modal" style="max-width:460px">
+    <div class="modal-title">🏠 Update Yield — <span id="yield-prop-name" style="color:var(--gold)"></span></div>
+    <input type="hidden" id="yield-inv-id">
+
+    <!-- Info properti -->
+    <div style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:12px 16px;margin-bottom:16px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px">
+      <div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:3px">💰 Modal</div>
+        <div style="font-size:14px;font-weight:700" id="yield-modal-val">—</div>
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:3px">📆 Pendapatan/Bln Saat Ini</div>
+        <div style="font-size:14px;font-weight:600;color:var(--green)" id="yield-cur-monthly">—</div>
+      </div>
+      <div>
+        <div style="font-size:10px;color:var(--text3);margin-bottom:3px">📊 Yield/Thn Saat Ini</div>
+        <div style="font-size:14px;font-weight:600;color:var(--gold)" id="yield-cur-pct">—</div>
+      </div>
+    </div>
+
+    <!-- Input baru -->
+    <div class="form-grid" style="margin-bottom:14px">
+      <div class="form-group">
+        <label class="form-label">Pendapatan Baru per Bulan (Rp)</label>
+        <input type="number" class="form-control" id="yield-monthly-new"
+          placeholder="0" step="any" oninput="onYieldMonthlyInput()">
+        <div class="form-hint">Distribusi / sewa bulanan baru</div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Yield Baru per Tahun (%)</label>
+        <input type="number" class="form-control" id="yield-pct-new"
+          placeholder="0.00" step="any" min="0" oninput="onYieldPctInput()">
+        <div class="form-hint">Auto-hitung dari pendapatan bulanan</div>
+      </div>
+    </div>
+
+    <!-- Preview harian/bulanan/tahunan -->
+    <div id="yield-preview-box" style="background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:14px 16px;margin-bottom:16px;display:none">
+      <div style="font-size:10px;color:var(--text3);margin-bottom:10px;text-transform:uppercase;letter-spacing:1px">📋 Estimasi Pendapatan Baru</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px">
+        <div style="background:var(--surface3);border-radius:8px;padding:10px;text-align:center">
+          <div style="font-size:9px;color:var(--text3);margin-bottom:4px">📅 Per Hari</div>
+          <div style="font-size:13px;font-weight:700;color:var(--green)" id="yield-prev-daily">—</div>
+        </div>
+        <div style="background:var(--surface3);border:1px solid rgba(34,197,94,0.3);border-radius:8px;padding:10px;text-align:center">
+          <div style="font-size:9px;color:var(--text3);margin-bottom:4px">📆 Per Bulan</div>
+          <div style="font-size:13px;font-weight:700;color:var(--green)" id="yield-prev-monthly">—</div>
+        </div>
+        <div style="background:var(--surface3);border:1px solid rgba(240,180,41,0.3);border-radius:8px;padding:10px;text-align:center">
+          <div style="font-size:9px;color:var(--text3);margin-bottom:4px">📊 Per Tahun</div>
+          <div style="font-size:13px;font-weight:700;color:var(--gold)" id="yield-prev-annual">—</div>
+        </div>
+      </div>
+      <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <span style="font-size:11px;color:var(--text3)">Yield per tahun:</span>
+        <span style="font-size:16px;font-weight:700;color:var(--gold)" id="yield-prev-pct">—</span>
+      </div>
+      <div id="yield-diff-box" style="margin-top:8px;font-size:11px;color:var(--text3);display:none">
+        Perubahan: <span id="yield-diff-val" style="font-weight:600"></span>
+      </div>
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-green" style="flex:1" onclick="saveYieldUpdate()">💾 Update Yield</button>
+      <button class="btn btn-outline" onclick="closeModal('yield-modal')">Batal</button>
+    </div>
+  </div>
+</div>
+
 <!-- ================== ADD / EDIT MODAL ================== -->
 <!-- ═══ MODAL PnL ═══════════════════════════════ -->
 <div class="modal-overlay" id="pnl-modal">
@@ -931,8 +1022,34 @@ $totalProg   = $totalTarget > 0 ? min($allStats['totalValue']/$totalTarget*100,1
           <div class="form-hint">Otomatis = pendapatan bulanan × 12</div>
         </div>
       </div>
-      <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:12px;margin-bottom:14px" id="prop-yield-preview">
-        <span style="color:var(--text3)">Isi modal dan pendapatan / yield untuk melihat estimasi</span>
+      <!-- Preview 3 kartu: harian / bulanan / tahunan -->
+      <div id="prop-yield-preview" style="margin-bottom:14px">
+        <!-- State kosong -->
+        <div id="prop-yield-empty" style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:12px;color:var(--text3)">
+          Isi modal dan pendapatan / yield untuk melihat estimasi
+        </div>
+        <!-- State terisi -->
+        <div id="prop-yield-cards" style="display:none">
+          <div style="font-size:10px;color:var(--text3);margin-bottom:8px;text-transform:uppercase;letter-spacing:1px">📋 Estimasi Pendapatan</div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">
+            <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:10px;text-align:center">
+              <div style="font-size:9px;color:var(--text3);margin-bottom:4px">📅 Per Hari</div>
+              <div style="font-size:12px;font-weight:700;color:var(--green)" id="prop-prev-daily">—</div>
+            </div>
+            <div style="background:var(--surface2);border:1px solid rgba(34,197,94,0.3);border-radius:8px;padding:10px;text-align:center">
+              <div style="font-size:9px;color:var(--text3);margin-bottom:4px">📆 Per Bulan</div>
+              <div style="font-size:13px;font-weight:700;color:var(--green)" id="prop-prev-monthly">—</div>
+            </div>
+            <div style="background:var(--surface2);border:1px solid rgba(240,180,41,0.3);border-radius:8px;padding:10px;text-align:center">
+              <div style="font-size:9px;color:var(--text3);margin-bottom:4px">📊 Per Tahun</div>
+              <div style="font-size:13px;font-weight:700;color:var(--gold)" id="prop-prev-annual-val">—</div>
+            </div>
+          </div>
+          <div style="background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:8px 12px;display:flex;align-items:center;justify-content:space-between">
+            <span style="font-size:11px;color:var(--text3)">Yield per tahun:</span>
+            <span style="font-size:15px;font-weight:700;color:var(--gold)" id="prop-prev-yield-pct">—</span>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -1448,27 +1565,42 @@ function calcMFUnits() {
 function calcPropYield() {
   const modal   = parseFloat(document.getElementById('inv-prop-buy').value) || 0;
   const monthly = parseFloat(document.getElementById('inv-prop-cur').value) || 0;
-  const preview = document.getElementById('prop-yield-preview');
   const annualEl= document.getElementById('inv-prop-annual');
   const yieldEl = document.getElementById('inv-prop-yield');
-  if (!preview) return;
+  const emptyEl = document.getElementById('prop-yield-empty');
+  const cardsEl = document.getElementById('prop-yield-cards');
+
   if (modal > 0 && monthly > 0) {
-    const annualYield = (monthly * 12 / modal * 100);
+    const daily       = monthly / 30;
     const annual      = monthly * 12;
-    // Sync field yield & tahunan (jika user tidak sedang edit field yield)
+    const annualYield = annual / modal * 100;
+
+    // Sync yield % & tahunan (jika user tidak sedang edit field yield)
     if (document.activeElement?.id !== 'inv-prop-yield' && yieldEl)
       yieldEl.value = annualYield.toFixed(2);
     if (annualEl) annualEl.value = annual.toFixed(0);
-    preview.innerHTML = `<span style="color:var(--text)">
-      Rp ${monthly.toLocaleString('id-ID')}/bulan =
-      <strong style="color:var(--green)">Rp ${annual.toLocaleString('id-ID')}/tahun</strong>
-      &nbsp;|&nbsp; Yield: <strong style="color:var(--gold)">${annualYield.toFixed(2)}%/tahun</strong>
-    </span>`;
-  } else if (modal > 0) {
-    preview.innerHTML = '<span style="color:var(--text3)">Isi pendapatan bulanan atau yield per tahun</span>';
-    if (annualEl) annualEl.value = '';
+
+    // Update kartu preview
+    if (emptyEl) emptyEl.style.display = 'none';
+    if (cardsEl) cardsEl.style.display = 'block';
+    const dEl = document.getElementById('prop-prev-daily');
+    const mEl = document.getElementById('prop-prev-monthly');
+    const aEl = document.getElementById('prop-prev-annual-val');
+    const yEl = document.getElementById('prop-prev-yield-pct');
+    if (dEl) dEl.textContent = fmtIDR(daily) + '/hr';
+    if (mEl) mEl.textContent = fmtIDR(monthly) + '/bln';
+    if (aEl) aEl.textContent = fmtIDR(annual) + '/thn';
+    if (yEl) yEl.textContent = annualYield.toFixed(2) + '%/thn';
   } else {
-    preview.innerHTML = '<span style="color:var(--text3)">Isi modal dan pendapatan / yield</span>';
+    // Sembunyikan kartu, tampilkan pesan kosong
+    if (emptyEl) {
+      emptyEl.style.display = 'block';
+      emptyEl.textContent = modal > 0
+        ? 'Isi pendapatan bulanan atau yield per tahun'
+        : 'Isi modal dan pendapatan / yield';
+    }
+    if (cardsEl) cardsEl.style.display = 'none';
+    if (annualEl) annualEl.value = '';
   }
 }
 
@@ -1483,11 +1615,8 @@ function syncMonthlyFromYield() {
     const annual  = monthly * 12;
     if (monthlyEl) monthlyEl.value = monthly.toFixed(2);
     if (annualEl)  annualEl.value  = annual.toFixed(0);
-    const preview = document.getElementById('prop-yield-preview');
-    if (preview) preview.innerHTML = `<span style="color:var(--text)">
-      Yield ${yieldPct}%/thn = Rp ${monthly.toLocaleString('id-ID', {minimumFractionDigits:0, maximumFractionDigits:0})}/bulan =
-      <strong style="color:var(--green)">Rp ${annual.toLocaleString('id-ID', {minimumFractionDigits:0, maximumFractionDigits:0})}/tahun</strong>
-    </span>`;
+    // Reuse calcPropYield untuk update kartu preview
+    calcPropYield();
   }
 }
 
@@ -1926,6 +2055,114 @@ async function savePnlEntry() {
   }
 }
 
+
+// ──────────────────────────────────────────────────────────────
+// YIELD UPDATE MODAL — Properti
+// ──────────────────────────────────────────────────────────────
+let _yieldModal   = 0;   // buy_price (modal)
+let _yieldCurMon  = 0;   // pendapatan bulanan saat ini
+
+function openYieldModal(invId, invName, buyPrice, curMonthly, curYield) {
+  _yieldModal  = parseFloat(buyPrice)   || 0;
+  _yieldCurMon = parseFloat(curMonthly) || 0;
+
+  document.getElementById('yield-inv-id').value   = invId;
+  document.getElementById('yield-prop-name').textContent = invName;
+  document.getElementById('yield-modal-val').textContent  = fmtIDR(_yieldModal);
+
+  document.getElementById('yield-cur-monthly').textContent =
+    _yieldCurMon > 0 ? fmtIDR(_yieldCurMon) + '/bln' : '—';
+  document.getElementById('yield-cur-pct').textContent =
+    curYield > 0 ? parseFloat(curYield).toFixed(2) + '%' : '—';
+
+  // Pre-fill dengan nilai saat ini
+  document.getElementById('yield-monthly-new').value = _yieldCurMon > 0 ? _yieldCurMon : '';
+  document.getElementById('yield-pct-new').value = curYield > 0 ? parseFloat(curYield).toFixed(2) : '';
+
+  _updateYieldPreview(_yieldCurMon > 0 ? _yieldCurMon : 0);
+  openModal('yield-modal');
+}
+
+function onYieldMonthlyInput() {
+  const monthly = parseFloat(document.getElementById('yield-monthly-new').value) || 0;
+  // Sync yield %
+  if (_yieldModal > 0 && monthly > 0) {
+    document.getElementById('yield-pct-new').value = (monthly * 12 / _yieldModal * 100).toFixed(2);
+  } else {
+    document.getElementById('yield-pct-new').value = '';
+  }
+  _updateYieldPreview(monthly);
+}
+
+function onYieldPctInput() {
+  const pct = parseFloat(document.getElementById('yield-pct-new').value) || 0;
+  // Sync monthly
+  if (_yieldModal > 0 && pct > 0) {
+    const monthly = _yieldModal * pct / 100 / 12;
+    document.getElementById('yield-monthly-new').value = monthly.toFixed(2);
+    _updateYieldPreview(monthly);
+  } else {
+    document.getElementById('yield-monthly-new').value = '';
+    _updateYieldPreview(0);
+  }
+}
+
+function _updateYieldPreview(monthly) {
+  const prevBox    = document.getElementById('yield-preview-box');
+  const prevDaily  = document.getElementById('yield-prev-daily');
+  const prevMon    = document.getElementById('yield-prev-monthly');
+  const prevAnn    = document.getElementById('yield-prev-annual');
+  const prevPct    = document.getElementById('yield-prev-pct');
+  const diffBox    = document.getElementById('yield-diff-box');
+  const diffVal    = document.getElementById('yield-diff-val');
+
+  if (monthly <= 0) { prevBox.style.display = 'none'; return; }
+  prevBox.style.display = 'block';
+
+  const daily  = monthly / 30;
+  const annual = monthly * 12;
+  const pct    = _yieldModal > 0 ? (annual / _yieldModal * 100) : 0;
+
+  if (prevDaily)  prevDaily.textContent  = fmtIDR(daily) + '/hr';
+  if (prevMon)    prevMon.textContent    = fmtIDR(monthly) + '/bln';
+  if (prevAnn)    prevAnn.textContent    = fmtIDR(annual) + '/thn';
+  if (prevPct)    prevPct.textContent    = pct.toFixed(2) + '%/thn';
+
+  // Tampilkan perubahan dari nilai sebelumnya
+  if (_yieldCurMon > 0 && monthly !== _yieldCurMon) {
+    const delta   = monthly - _yieldCurMon;
+    const sign    = delta >= 0 ? '+' : '';
+    const color   = delta >= 0 ? 'var(--green)' : 'var(--red)';
+    diffBox.style.display = 'block';
+    diffVal.textContent   = sign + fmtIDR(delta) + '/bln';
+    diffVal.style.color   = color;
+  } else {
+    diffBox.style.display = 'none';
+  }
+}
+
+async function saveYieldUpdate() {
+  const invId   = parseInt(document.getElementById('yield-inv-id').value);
+  const monthly = parseFloat(document.getElementById('yield-monthly-new').value) || 0;
+  if (!monthly || monthly <= 0) {
+    toast('Masukkan pendapatan bulanan yang valid', 'error'); return;
+  }
+  // Update current_value = pendapatan per bulan
+  const res = await api('investments.php', 'POST', {
+    id: invId,
+    _yield_update: true,
+    current_value: monthly,
+  });
+  if (res.success) {
+    const annual = monthly * 12;
+    const pct    = _yieldModal > 0 ? (annual / _yieldModal * 100).toFixed(2) : '—';
+    toast(`Yield diperbarui ✅ · ${fmtIDR(monthly)}/bln · ${pct}%/thn`, 'success');
+    closeModal('yield-modal');
+    setTimeout(() => location.reload(), 600);
+  } else {
+    toast('Gagal: ' + (res.error || ''), 'error');
+  }
+}
 
 <?php if ($preSellId && $preSellCat): ?>
 window.addEventListener('load', () => {
