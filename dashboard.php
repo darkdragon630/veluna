@@ -2144,10 +2144,13 @@ function _updateYieldPreview(monthly) {
 async function saveYieldUpdate() {
   const invId   = parseInt(document.getElementById('yield-inv-id').value);
   const monthly = parseFloat(document.getElementById('yield-monthly-new').value) || 0;
+  if (!invId || isNaN(invId)) {
+    toast('ID investasi tidak valid', 'error'); return;
+  }
   if (!monthly || monthly <= 0) {
     toast('Masukkan pendapatan bulanan yang valid', 'error'); return;
   }
-  // Update current_value = pendapatan per bulan
+  // _yield_update = shortcut di server untuk update current_value properti saja
   const res = await api('investments.php', 'POST', {
     id: invId,
     _yield_update: true,
