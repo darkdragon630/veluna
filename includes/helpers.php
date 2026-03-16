@@ -26,6 +26,7 @@ define('COIN_MAP', [
     'AAVE'=> 'aave',          'MKR' => 'maker',           'SAND' => 'the-sandbox',
     'AXS' => 'axie-infinity', 'FIL' => 'filecoin',        'ALGO' => 'algorand',
     'VET' => 'vechain',       'HBAR'=> 'hedera-hashgraph','ETC'  => 'ethereum-classic',
+       'VANA' => 'vana',
 ]);
 
 // ── CONSTANTS ──────────────────────────────────────
