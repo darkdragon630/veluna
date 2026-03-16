@@ -9,7 +9,7 @@
 ╚═╝      ╚═════╝ ╚═╝  ╚═╝   ╚═╝    ╚═════╝ ╚═╝      ╚═════╝ ╚══════╝╚═╝ ╚═════╝
 ```
 
-**🏷️ v1.1.0** &nbsp;|&nbsp; **🛠️ Build 2025.03** &nbsp;|&nbsp; **🌙 Dark Gold Theme** &nbsp;|&nbsp; **⚡ Realtime Crypto**
+**🏷️ v1.2.0** &nbsp;|&nbsp; **🛠️ Build 2025.03** &nbsp;|&nbsp; **🌙 Dark Gold Theme** &nbsp;|&nbsp; **⚡ Realtime Crypto**
 
 ---
 
@@ -349,7 +349,31 @@ Semua endpoint di `api/` memerlukan CSRF token di header `X-CSRF-Token` (kecuali
 
 ## 📝 Changelog
 
-### v1.1.0 — *2025.03 (terkini)*
+### v1.2.0 — *2025.03 (terkini)*
+
+**🔧 Bug Fixes**
+- Fix error 400 "Invalid category" saat update yield properti — `api/investments.php` sekarang punya shortcut `_yield_update` yang tidak memerlukan field `category`
+- Fix `_yield_update` tidak dikenali di server karena server masih pakai versi lama `investments.php`
+- Fix validasi `invId` di `saveYieldUpdate()` — cegah request terkirim jika ID kosong atau NaN
+
+**🏠 Fitur: Update Yield Properti**
+- Tombol 🏠 di baris investasi properti kini berfungsi penuh untuk update pendapatan bulanan / yield tanpa reload penuh
+- Preview estimasi pendapatan **per hari / per bulan / per tahun** muncul realtime saat input
+- Menampilkan delta perubahan dari yield sebelumnya (hijau = naik, merah = turun)
+
+**📊 Fitur: Preview Pendapatan Properti di Modal Tambah/Edit**
+- Preview 3 kartu (Hari / Bulan / Tahun) muncul otomatis saat mengisi modal + pendapatan
+- Sinkronisasi dua arah: isi % yield → auto-hitung bulanan, isi bulanan → auto-hitung % yield
+- Saat modal **edit** dibuka, kartu preview langsung tampil dengan data tersimpan
+
+**📄 PDF Export Improvements**
+- Tabel Tabungan/Darurat: tambah kolom `Unreal.` terpisah dari `Realized`
+- Tabel Saham/Reksa Dana/Crypto: dari 7 kolom → **8 kolom** (tambah kolom `Real.` untuk realized PnL)
+- Font size disesuaikan ke 6.5 untuk 8-kolom agar tidak overflow
+
+---
+
+### v1.1.0 — *2025.03*
 
 **🔧 Bug Fixes**
 - Fix `Uncaught SyntaxError: Identifier 'miniVal' has already been declared`
@@ -392,4 +416,4 @@ Gunakan fitur **💡 Saran Fitur** di dalam aplikasi untuk kirim feedback langsu
 
 ---
 
-*PortoFolio v1.1.0 — Dibuat dengan ❤️ untuk tracking investasi pribadi*
+*PortoFolio v1.2.0 — Dibuat dengan ❤️ untuk tracking investasi pribadi*
