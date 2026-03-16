@@ -26,6 +26,17 @@ if ($method === 'POST') {
     $body = json_decode(file_get_contents('php://input'), true);
     if (!$body) jsonErr('Invalid JSON');
 
+    // ── Yield update shortcut (property only) ──────────────────────
+    if (!empty($body['_yield_update'])) {
+        $id      = (int)($body['id'] ?? 0);
+        $monthly = isset($body['current_value']) ? (float)$body['current_value'] : null;
+        if (!$id || $monthly === null || $monthly < 0) jsonErr('Invalid params');
+        $stmt = $db->prepare("UPDATE investments SET current_value = ? WHERE id = ? AND category = 'property' AND is_sold = 0");
+        $stmt->execute([$monthly, $id]);
+        if ($stmt->rowCount() === 0) jsonErr('Property not found', 404);
+        jsonOk(['id' => $id, 'current_value' => $monthly]);
+    }
+
     $id  = $body['id'] ?? null;
     $cat = $body['category'] ?? null;
     if (!$cat || !array_key_exists($cat, CATEGORIES)) jsonErr('Invalid category');
